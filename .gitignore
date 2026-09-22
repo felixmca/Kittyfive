@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env*.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.verify/
+# generated runtime decoders (vendored on predev/prebuild)
+public/draco/
+public/basis/
+# Raw photos and clips from the camera roll never leave this machine: the repo
+# is public. Everything under assets-raw is ignored except the README files;
+# the processed web frames in public/story are what get committed.
+assets-raw/**
+!assets-raw/**/
+!assets-raw/**/README.md
