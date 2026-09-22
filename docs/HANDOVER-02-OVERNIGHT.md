@@ -1,5 +1,77 @@
 # Handover 02: the overnight session (22 → 23 Sep 2026)
 
+## Morning note for Felix (23 Sep 2026)
+
+**Live at https://kittyfive.vercel.app.** Screenshots of every step are in
+[`docs/screenshots/landing/`](screenshots/landing/) (`phone-01` … `phone-11`,
+`desktop-01` … `04`).
+
+**What you will see**
+- Chapter 1 plays under the camera as the page loads, and "A cold night"
+  sets letter by letter as it ends. A "Kittyfive" splash with a loading bar
+  appears only on a slow connection.
+- One swipe (or the wheel, ↓, Space) brings the story full screen and plays
+  on. The neighbours' chat airdrops in from behind you while chapter 1's last
+  frame shrinks into its photo. It holds for a beat so the chat can be read,
+  then zooms back into the photo, and five-by-dawn plays.
+- In chapter 2 a clock ticks from 12:30 to 2:30. At each half hour one of
+  your five kitten photos drops in as a polaroid, then the clock runs on to
+  dawn. When the clip ends the kittens are lifted away one by one (the calico
+  sitting up leaves last) and "Five by dawn" sets.
+- Press and hold anywhere to pause; drag while holding to scrub back and
+  forth; let go and it carries on. ↑ or a swipe down goes back a chapter.
+  **Skip story** (top left) hands the page back.
+- Chapters 3 and 4 have stand-ins until their clips exist. In chapter 3,
+  chapter 2's last frame turns winter-night blue with rain, and a drawn
+  MISSING flyer drops in. In chapter 4, the hand-on-head photo sits in warm
+  river light. Both captions are in place.
+- `/stories` has the four chapters in their volumes (live database, seed,
+  demo copy); the tiles for 1 and 2 now use their own pictures.
+
+**Choices I made (say if you want them different)**
+- The first swipe brings the story full screen *and* moves on if chapter 1
+  has finished, so it is four swipes from the camera to the end.
+- A second swipe while a chapter is playing speeds it up; it does not skip.
+- Seedance redrew chapter 2's first frame (her head is tilted and she is on a
+  box), so no crop of the photo matches it. The chat therefore zooms back to
+  chapter 1's last frame, which matches the photo to the pixel, and chapter 2
+  dissolves in over half a second.
+- Chapter 2 plays over 6 s instead of 5.05 s so the five kittens have room.
+- Scrolling back up past the story from the end starts chapter 1 again
+  under the camera.
+
+**What you need to do**
+1. Chapters 3 and 4 ([Handover 01](HANDOVER-01-STORY-ASSETS.md)). Drop them
+   in `assets-raw/story/03-missing-found/` and `04-riverside-sofa/`, run
+   `npm run story`, commit `public/story`, and push. The landing picks them up
+   by itself: the flyer falls across the join into clip 3, and clip 4 fades
+   in. Then tell the next session how the joins look.
+2. The real MISSING flyer goes in `assets-raw/ui/flyer/` (PNG or JPEG); after
+   `npm run story` it replaces the drawn one.
+3. Still to do from yesterday: Supabase URL settings, then sign up
+   (Roadmap 2A).
+4. Try it on your phone. I could only test in headless Chrome. The two
+   chapters' frames take about 350 MB decoded; if an older iPhone reloads
+   the page mid-story, say so.
+
+**Also done overnight**
+- Disk: I moved Downloads, the Ubuntu (WSL) disk, Playwright's browsers, the
+  npm cache and the old crash dumps to `D:\felix` (there is a README.txt
+  there), and C: went from 3.4 GB to 21 GB free. I left three things for you
+  to decide. Your other projects on the Desktop (about 9 GB) stay put because
+  moving them breaks Claude's per-project memory. The hibernation file
+  (6.8 GB) shrinks to half with `powercfg /h /type reduced` in an admin
+  terminal. PostgreSQL 16 (4 GB) can go if you no longer use it.
+- Privacy: `public/story/whatsapp-chat.json` named the two neighbours (first
+  names in a note and in the redaction keys). It now publishes only layout
+  numbers, and the pipeline copies only those. The names are still in git
+  history (commit `dca6e34`); removing them means rewriting history and
+  force-pushing, so that is your call.
+- Checks: `npm run verify` passes 126/126 on the production build (390×844
+  and 1280×800, including reduced motion), and tsc and eslint are clean.
+
+---
+
 **For a fresh Claude session.** Felix is asleep for about 8 hours. Build the new
 swipe-driven landing story from his first two clips, keep everything else
 working, deploy, and leave him a short morning summary. Work autonomously; do
@@ -307,6 +379,6 @@ the top of this file (what works, what to look at, what he needs to do).
 - Don't restructure the Stories page, reader or studio beyond task B; they
   work.
 
-## 8. Morning note for Felix (fill in at the end)
+## 8. Morning note for Felix
 
-*(write here: what is live, links to screenshots, anything that needs him.)*
+Written at the top of this file.
