@@ -9,6 +9,18 @@ and move on.
 Read first, in this order: the memory index (`MEMORY.md` in the project memory
 folder), `docs/ROADMAP.md`, `docs/HANDOVER-01-STORY-ASSETS.md`, then this file.
 
+**If you started in a fresh git worktree** (not `C:\Users\felix\Desktop\Python Projects\Kitty`
+itself), three git-ignored things are missing:
+1. `.env.local`: copy it from the main checkout (it holds the Supabase URL and
+   key, `SUPABASE_DB_URL` for `scripts/db.mjs`, and `ANTHROPIC_API_KEY`).
+   Without it the site runs in demo mode, which is fine for the landing work.
+2. `node_modules`: `npm install` (~650 MB; check `(Get-PSDrive C).Free` first,
+   the C: drive is small; `npm cache clean --force` afterwards frees the cache).
+3. Raw media: `assets-raw/` media exists only in the main checkout. The
+   processed outputs you need are committed in `public/story/`. Only re-run
+   `npm run story` from the main checkout.
+Push to `main` as usual (merge or rebase your worktree branch onto `main`).
+
 ---
 
 ## 1. What Felix asked for (his words, condensed)
