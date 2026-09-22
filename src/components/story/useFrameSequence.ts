@@ -40,6 +40,12 @@ export interface FrameSource {
   poster?: string;
   /** SceneMedia.kind === "none": never load anything. */
   none?: boolean;
+  /**
+   * "progressive" (default): first, last, every 8th, then the gaps, so a
+   * half-loaded scene already scrubs. "sequential": 1, 2, 3… for a clip that
+   * is about to play from its start.
+   */
+  order?: "progressive" | "sequential";
 }
 
 export interface FrameSequence {
@@ -66,7 +72,11 @@ interface Snapshot {
 
 const IDLE: Snapshot = { status: "idle", loaded: 0, total: 0, width: 0, height: 0 };
 
-class SequenceController {
+/**
+ * The loader behind useFrameSequence, exported for code that drives frames
+ * from its own animation loop (the landing's SwipeStory) rather than React.
+ */
+export class SequenceController {
   frames: (FrameImage | null)[] = [];
   snap: Snapshot = IDLE;
   private abort: AbortController | null = null;
@@ -170,7 +180,7 @@ class SequenceController {
       this.setSnap({ total: n, loaded: 0, width: manifest.width, height: manifest.height });
 
       let failed = 0;
-      const order = progressiveOrder(n);
+      const order = source.order === "sequential" ? Array.from({ length: n }, (_, i) => i) : progressiveOrder(n);
       const tasks = order.map((idx) =>
         schedule(
           async (sig) => {

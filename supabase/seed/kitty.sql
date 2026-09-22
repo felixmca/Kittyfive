@@ -1,8 +1,13 @@
 -- ════════════════════════════════════════════════════════════════════════
--- Kitty: the first pet on Kittyfive. Her volumes and the six chapters of the
+-- Kitty: the first pet on Kittyfive. Her volumes and the four chapters of the
 -- landing story. Content, not schema, so it is not a migration: run it once
 -- in the SQL editor of the project that hosts Kitty. Safe to re-run (it
 -- updates by slug and never deletes).
+--
+-- The landing story had six chapters until 23 Sep 2026; the live project was
+-- moved to these four in place (thousands-of-flyers became missing-found,
+-- a-flat-on-the-thames became riverside-sofa, and-there-she-was and
+-- next-to-me were folded into them), so this file describes a fresh project.
 --
 -- Self-hosting for your own pet? Copy this file, change the words, run it.
 -- ════════════════════════════════════════════════════════════════════════
@@ -81,33 +86,37 @@ on conflict (pet_id, slug) do update
       story_date = excluded.story_date, mood = excluded.mood, subtitle = excluded.subtitle,
       body = excluded.body;
 
--- ── the six landing chapters, each inside the volume that fits it ────────
+-- ── the four landing chapters, each inside the volume that fits it ───────
+-- Tile images are the chapter's own pictures from public/story (chapters 3
+-- and 4 get theirs once their clips are processed; until then the tile
+-- shows its gradient).
 with pet as (select id from public.pets where slug = 'kitty'),
-c (slug, volume_slug, position, landing_order, title, date_label, story_date, subtitle, description) as (
+c (slug, volume_slug, position, landing_order, title, date_label, story_date, subtitle, description,
+   tile_image_a, tile_image_b) as (
   values
   ('a-cold-night', 'the-back-door', 0, 1, 'A cold night', 'January 2025', null::date,
-   'She did not ask. She just came in.',
-   'The night a black-and-white cat walked in through the back door at Smith Close, and stayed.'),
+   'She did not ask. She just came in. She stayed.',
+   'The night a black-and-white cat walked in through the back door at Smith Close, and stayed.',
+   '/story/01-a-cold-night/still.webp', '/story/01-a-cold-night/extras/end-frame.webp'),
   ('five-by-dawn', 'the-cupboard', 0, 2, 'Five by dawn', null, date '2025-04-14',
-   'One every thirty minutes from half past midnight.',
-   'A cardboard box in the bedroom cupboard, five kittens by dawn, and a cat who had clearly done the maths.'),
-  ('a-flat-on-the-thames', 'the-sofa-on-the-river', 0, 3, 'A flat on the Thames', 'November 2025', null,
-   'New windows. New smells. The same cat on the same sofa.',
-   'The move to a ground-floor flat on the river at Pacific Wharf.'),
-  ('thousands-of-flyers', 'what-the-flyer-said', 0, 4, 'Thousands of flyers', 'December 2025 – April 2026', null,
-   'Every letterbox we could reach.',
-   'Two days before Christmas she went missing. Four months of rainy nights and wet paper.'),
-  ('and-there-she-was', 'the-neighbour', 0, 5, 'And there she was', 'April 2026', null,
-   'A subtle type of love.',
-   'A neighbour saw a flyer, lured her in with snacks, and called. I cycled over as fast as I could.'),
-  ('next-to-me', 'the-neighbour', 1, 6, 'Next to me', 'Now', null,
-   'The entire time I have been building this.',
-   'Where she has been all along: next to me, on the sofa.')
+   'Half past midnight, a cardboard box, one kitten every thirty minutes.',
+   'A cardboard box in the bedroom cupboard, five kittens by dawn, and a cat who had clearly done the maths.',
+   '/story/02-five-by-dawn/extras/end-frame.webp', '/story/02-five-by-dawn/extras/kittens1.webp'),
+  ('missing-found', 'the-neighbour', 0, 3, 'Missing, Found', 'December 2025 – April 2026', null,
+   'Four months of flyers. Then a neighbour, some snacks, and a phone call.',
+   'Two days before Christmas she went missing. Four months of flyers, rainy nights and wet paper, until a neighbour saw one, put some snacks down, and called.',
+   null, null),
+  ('riverside-sofa', 'the-sofa-on-the-river', 0, 4, 'Riverside sofa', 'November 2025 – now', null,
+   'She''s been next to me the entire time I''ve been building this.',
+   'A ground-floor flat on the Thames at Pacific Wharf: new windows, new smells, and the same cat on the same sofa, next to me the whole time.',
+   null, null)
 )
 insert into public.chapters (pet_id, volume_id, slug, position, landing_order, status,
-                             title, date_label, story_date, subtitle, description)
+                             title, date_label, story_date, subtitle, description,
+                             tile_image_a, tile_image_b)
 select pet.id, vol.id, c.slug, c.position, c.landing_order, 'published',
-       c.title, c.date_label, c.story_date, c.subtitle, c.description
+       c.title, c.date_label, c.story_date, c.subtitle, c.description,
+       c.tile_image_a, c.tile_image_b
   from pet
   join c on true
   join public.volumes vol on vol.pet_id = pet.id and vol.slug = c.volume_slug
@@ -115,7 +124,8 @@ on conflict (pet_id, slug) do update
   set volume_id = excluded.volume_id, position = excluded.position,
       landing_order = excluded.landing_order, title = excluded.title,
       date_label = excluded.date_label, story_date = excluded.story_date,
-      subtitle = excluded.subtitle, description = excluded.description;
+      subtitle = excluded.subtitle, description = excluded.description,
+      tile_image_a = excluded.tile_image_a, tile_image_b = excluded.tile_image_b;
 
 -- ── one scene per landing chapter: the clip and its words ────────────────
 -- Media comes from the landing story's build (public/story/<folder>/): the
@@ -133,20 +143,15 @@ with s (chapter_slug, folder, kicker, beats, transition) as (
      'Then another, every thirty minutes.',
      'By dawn there were five.',
      'She raised them in that cupboard, until every one was adopted and the box was empty again.'], 'walk-out-of-frame'),
-  ('a-flat-on-the-thames', '03-a-flat-on-the-thames', 'November 2025 · Pacific Wharf', array[
-     'In November we moved to a ground-floor flat on the river.',
-     'New windows. New smells. The same cat on the same sofa.'], 'fall'),
-  ('thousands-of-flyers', '04-thousands-of-flyers', '23 December 2025', array[
-     'Two days before Christmas we were away for three nights.',
-     'The building manager fed her every morning and every evening.',
+  ('missing-found', '03-missing-found', '23 December 2025 – April 2026', array[
+     'Two days before Christmas we were away for three nights. The building manager fed her every morning and every evening.',
      'She thought we had left her. She went missing.',
-     'Thousands of flyers. Every letterbox we could reach. Rainy nights. Wet paper. Four months.'], 'crossfade'),
-  ('and-there-she-was', '05-and-there-she-was', 'April 2026', array[
-     'Four months later, a neighbour saw a flyer, lured her inside with some snacks, and called.',
-     'I cycled over as fast as I could.',
-     'And there she was. Like she had nothing to say. Just a faint recognition.',
-     'That''s Kitty sometimes. A subtle type of love.'], 'slide-up'),
-  ('next-to-me', '06-next-to-me', 'Now', array[
+     'Thousands of flyers. Every letterbox we could reach. Rainy nights. Wet paper. Four months.',
+     'Then a neighbour saw a flyer, lured her inside with some snacks, and called.',
+     'I cycled over as fast as I could. And there she was. That''s Kitty sometimes. A subtle type of love.'], 'fall'),
+  ('riverside-sofa', '04-riverside-sofa', 'November 2025 – now · Pacific Wharf', array[
+     'In November we moved to a ground-floor flat on the Thames.',
+     'New windows. New smells. The same cat on the same sofa.',
      'She''s been next to me the entire time I''ve been building this.'], 'crossfade')
 )
 insert into public.chapter_scenes (chapter_id, position, kicker, title, beats, image, frames, pin_length, transition)

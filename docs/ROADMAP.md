@@ -1,8 +1,9 @@
 # Kittyfive roadmap
 
-*Last updated 22 Sep 2026 (late). This is the plan every session starts from:
-find the first unchecked box in the current phase, do it, tick it, deploy.
-Overnight work is briefed in [Handover 02](HANDOVER-02-OVERNIGHT.md).*
+*Last updated 23 Sep 2026 (overnight). This is the plan every session starts
+from: find the first unchecked box in the current phase, do it, tick it,
+deploy. The overnight session's morning note is at the top of
+[Handover 02](HANDOVER-02-OVERNIGHT.md).*
 
 ## What we are building
 
@@ -31,7 +32,7 @@ The three pillars, in Kitty's words:
 | Phase | Ships | Needs Felix | Status |
 |---|---|---|---|
 | **0 · Foundation** | Story engine, store, try-on, commerce adapters, verify harness, research | — | ✅ done 21–22 Sep |
-| **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 clips 1–2 in; swipe engine overnight ([Handover 02](HANDOVER-02-OVERNIGHT.md)) |
+| **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 swipe landing live with chapters 1–2; 3–4 play designed stand-ins until their clips land |
 | **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built and deployed; waiting on Felix's sign-up for the live studio test |
 | **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room and garden reference photos | ⬜ next |
 | **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | — | ⬜ |
@@ -72,12 +73,15 @@ scrubs. Chapter 1 plays under the camera hero as the page loads, behind a
 - [x] Handover 01 rewritten; folder tree; raw media git-ignored
 - [x] Pipeline: newest clip → frames (never upscaled), start frame → still, extras keep their names, HEIC converted, flyer/cut-out/portrait/whatsapp published
 - [x] Neighbours' WhatsApp screenshot blurred (names, numbers, avatars, house number); the original is never published
-- [ ] Commit chapter 1–2 media (Handover 02, task A)
-- [ ] Four chapters in config, database, seed and demo copy (task B)
-- [ ] Swipe story engine: stops, swipe/keys/wheel, hold to pause, drag to scrub, reduced motion, skip (task C)
-- [ ] Chapter 1 → 2 WhatsApp flight; chapter 2 kittens; captions that assemble; loading splash (tasks D–G)
-- [ ] Verify at 390×844 and 1280×800 (headless Playwright + `npm run verify`), deploy (tasks H–I)
-- [ ] When clips 3–4 land: flyer drop, chapters 3–4, tune timings
+- [x] Commit chapter 1–2 media (Handover 02, task A)
+- [x] Four chapters in config, database, seed and demo copy (task B)
+- [x] Swipe story engine: stops, swipe/keys/wheel, hold to pause, drag to scrub, reduced motion, skip (task C)
+- [x] Chapter 1 → 2 WhatsApp flight; chapter 2 kittens; captions that assemble; loading splash (tasks D–G)
+- [x] Verify at 390×844 and 1280×800 (headless Playwright + `npm run verify`), deploy (tasks H–I)
+- [x] Chapters 3–4 stand-ins (night + rain + the drawn MISSING flyer; her at home in warm river light), so the story is complete before their clips
+- [ ] When clips 3–4 land: `npm run story` picks them up by itself; then look at the joins and tune timings (`src/components/landing/SwipeStory/timeline.ts`)
+- [ ] When `ui/flyer/` has the real flyer: it replaces the drawn one automatically
+- [ ] Try it on your phone (iOS Safari): swipe, hold, drag, Skip; say what feels off
 
 **Done when** a phone loading the site sees chapter 1 play under the camera,
 and four swipes carry it through the whole story with no seams.
@@ -255,7 +259,7 @@ physical off switch) triggered by a paid Stripe order; Canon 750D live view for
 | Platform shape | Multi-tenant from day one (`pets` own volumes and chapters); Kitty is the first pet | Single-cat schema (expensive to retrofit) |
 | AI clips | Kling 3.0 on artta.ai, image + prompt, 9:16, 5 s | Text-only prompts (a different cat every time) |
 | Clip automation | **artta.ai has no public API** (site says "no API keys required"; no docs; verified 22 Sep 2026). Builder hands off prompts + start frames and takes the clip back; an API provider comes in Phase 7 | Scraping artta (breaks, and breaks their terms) |
-| Scroll story | Frame sequences on canvas, scrubbed by the scroll | `<video>` scrubbing (iOS) |
+| Landing story | Frame sequences on canvas, played by swipes from stop to stop; hold to pause, drag to scrub; every visual a function of the playhead | Scroll-scrubbing (too much swiping for a story), `<video>` scrubbing (iOS) |
 | Chapter reader | Native scroll with neighbours loaded above and below | Snap paging (fights the scroll-driven scenes) |
 | Auth | Supabase email + password with confirm email (Birthday Lobby pattern); browser session, bearer token to API routes | Magic links only |
 | Admin | `admins` table + `is_admin()` that also requires a confirmed email; RLS is the boundary, the UI only reflects it | Email check in React |

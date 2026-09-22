@@ -10,7 +10,7 @@
 // ABSENT request or an unexpected one), and state that looked saved until you
 // reloaded. Screenshots land in .verify/ and are meant to be looked at.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -36,6 +36,9 @@ const VIEWPORTS = [
 const EXPECTED_MISSING = [
   /\/models\/[^/]+\.glb$/,
   /\/story\/[^/]+\/manifest\.json$/,
+  // Chapters 3–4 have no clip yet: the reader probes their still and shows a placeholder.
+  /\/story\/[^/]+\/still\.webp$/,
+  /\/story\/flyer\.webp$/,
   /\/story\/cutouts\//,
   /\/turntable\/manifest\.json$/,
   /\/products\/[^/]+\.(png|jpg|webp)$/,
@@ -64,8 +67,10 @@ async function canvasPainted(handle) {
   return { ok: colours.size >= 3, detail: `${colours.size} colours, ${info.width}×${info.height}` };
 }
 
-async function checkCanvases(page, viewport, route, label = "canvas painted") {
-  const canvases = await page.$$("canvas");
+// Note: an element screenshot scrolls the element into view, which on the
+// landing moves the story on (it owns the scroll), so pass a selector there.
+async function checkCanvases(page, viewport, route, label = "canvas painted", selector = "canvas") {
+  const canvases = await page.$$(selector);
   if (!canvases.length) {
     record(viewport, route, label, false, "no <canvas> found");
     return;
@@ -78,15 +83,6 @@ async function checkCanvases(page, viewport, route, label = "canvas painted") {
     const r = await canvasPainted(c);
     record(viewport, route, `${label} #${i}`, r.ok, r.detail);
   }
-}
-
-async function scrollTo(page, y) {
-  await page.evaluate((y) => {
-    const l = window.__lenis;
-    if (l && typeof l.scrollTo === "function") l.scrollTo(y, { immediate: true, force: true });
-    window.scrollTo(0, y);
-  }, y);
-  await page.waitForTimeout(350);
 }
 
 async function hitTest(page, selector) {
@@ -144,6 +140,9 @@ async function withPage(browser, viewport, fn) {
     // full text read to `done`, and the network log still said ERR_ABORTED).
     // The chat journey separately asserts that a reply actually arrived.
     if (why === "net::ERR_ABORTED" && /\/api\/chat$/.test(new URL(u).pathname)) return;
+    // Next.js prefetches linked routes (?_rsc=…) and cancels them when the page
+    // goes away; /stories renders on demand from Supabase, so they are often in flight.
+    if (why === "net::ERR_ABORTED" && new URL(u).searchParams.has("_rsc")) return;
     errors.push(`requestfailed: ${u} :: ${why}`);
   });
   page.on("response", (r) => {
@@ -165,12 +164,68 @@ async function goto(page, route) {
   await page.waitForTimeout(600);
 }
 
+// ─── the swipe story (src/components/landing/SwipeStory) ─────────────────────
+
+const storyState = (page) => page.evaluate(() => window.__swipeStory?.debugState() ?? null);
+
+/** A cheap fingerprint of the story canvas, to prove frames change (or do not). */
+const storySig = (page) =>
+  page.evaluate(() => {
+    const c = document.querySelector("[data-swipe-story] canvas");
+    if (!c) return 0;
+    const x = document.createElement("canvas");
+    x.width = 18;
+    x.height = 32;
+    const g = x.getContext("2d");
+    g.drawImage(c, 0, 0, 18, 32);
+    const d = g.getImageData(0, 0, 18, 32).data;
+    let h = 0;
+    for (let i = 0; i < d.length; i += 4) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) >>> 0;
+    return h;
+  });
+
+const waitRest = (page, timeout = 25_000) =>
+  page
+    .waitForFunction(() => {
+      const s = window.__swipeStory?.debugState();
+      return s && s.started && s.target === null && !s.holding;
+    }, null, { timeout })
+    .then(() => true, () => false);
+
+/** Opacity of the caption whose title is `title`, 0 when hidden. */
+const captionShown = (page, title) =>
+  page.evaluate((title) => {
+    for (const c of document.querySelectorAll("[data-swipe-story] [data-el='caption']")) {
+      if (c.querySelector("h2")?.textContent?.replace(/\s+/g, " ").trim() !== title) continue;
+      const s = getComputedStyle(c);
+      return s.visibility === "visible" ? Number(s.opacity) : 0;
+    }
+    return -1;
+  }, title);
+
+async function swipeUp(page, viewport) {
+  if (!viewport.mobile) {
+    await page.mouse.move(viewport.width / 2, viewport.height / 2);
+    await page.mouse.wheel(0, 160);
+    return;
+  }
+  const x = viewport.width / 2;
+  const y = viewport.height * 0.75;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y - 90, { steps: 3 });
+  await page.mouse.move(x, y - 220, { steps: 3 });
+  await page.mouse.up();
+}
+
 async function journeyLanding(browser, viewport) {
   const route = "/";
   await withPage(browser, viewport, async (page, errors, bad) => {
     await goto(page, route);
     await page.screenshot({ path: join(OUT, `landing-${viewport.name}-00-top.png`) });
-    await checkCanvases(page, viewport.name, route, "hero canvas painted");
+    const stageTop = await page.$eval("[data-swipe-story]", (el) => Math.round(el.getBoundingClientRect().top)).catch(() => -1);
+    record(viewport.name, route, "stage sits under the hero", stageTop > 100 && stageTop < viewport.height * 0.6, `stage top ${stageTop}px`);
+    await checkCanvases(page, viewport.name, route, "hero canvas painted", "main > section:first-child canvas");
 
     // Menu button reachable at its own centre, above everything else.
     const menu = await hitTest(page, 'button[aria-label="Open menu"]');
@@ -178,28 +233,121 @@ async function journeyLanding(browser, viewport) {
     const menuBox = await (await page.$('button[aria-label="Open menu"]'))?.boundingBox();
     if (menuBox) record(viewport.name, route, "menu button ≥44px", menuBox.width >= 44 && menuBox.height >= 44, `${menuBox.width}×${menuBox.height}`);
 
-    // Scroll the story end to end, screenshot each step.
-    const total = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
-    record(viewport.name, route, "page is long (story present)", total > viewport.height * 8, `${Math.round(total)}px of scroll`);
-    const steps = 8;
-    for (let i = 1; i <= steps; i++) {
-      await scrollTo(page, Math.round((total * i) / steps));
-      await page.screenshot({ path: join(OUT, `landing-${viewport.name}-${String(i).padStart(2, "0")}.png`) });
+    // Chapter 1 plays under the hero as the page loads, then rests on its stop.
+    const started = await page.waitForFunction(() => window.__swipeStory?.debugState()?.started, null, { timeout: 30_000 }).then(() => true, () => false);
+    record(viewport.name, route, "story starts", started);
+    const splash = await page.$eval("[data-swipe-story]", (el) => el.dataset.splash).catch(() => "?");
+    record(viewport.name, route, "no loading splash once started", splash === "false", `data-splash=${splash}`);
+    const s0 = await storyState(page);
+    const sigs = new Set();
+    if (s0 && s0.target !== null) {
+      for (let i = 0; i < 6; i++) {
+        sigs.add(await storySig(page));
+        await page.waitForTimeout(220);
+      }
     }
-    // The synthetic scene has frames; at least one story canvas must have painted by now.
-    await scrollTo(page, Math.round(total * 0.25));
-    await page.waitForTimeout(1200);
-    await checkCanvases(page, viewport.name, route, "story canvas painted (25%)");
+    record(viewport.name, route, "chapter 1 plays (frames change)", sigs.size >= 3 || (s0 && s0.target === null), `${sigs.size} distinct frames in 1.3 s`);
+    await page.screenshot({ path: join(OUT, `landing-${viewport.name}-01-chapter1.png`) });
+    const rested = await waitRest(page);
+    const s1 = await storyState(page);
+    const a = await storySig(page);
+    await page.waitForTimeout(500);
+    const b = await storySig(page);
+    record(viewport.name, route, "chapter 1 stops on its final frame", rested && Math.abs(s1.t - s1.stops[0]) < 1e-3 && a === b, `t=${s1?.t.toFixed(2)} stop=${s1?.stops[0]?.toFixed(2)}`);
+    await page.waitForTimeout(700);
+    record(viewport.name, route, "caption 1 set at the stop", (await captionShown(page, "A cold night")) > 0.95);
+    await page.screenshot({ path: join(OUT, `landing-${viewport.name}-02-stop1.png`) });
+    await checkCanvases(page, viewport.name, route, "story canvas painted", "[data-swipe-story] canvas");
 
-    // Turntable + the two buttons at the bottom.
-    await scrollTo(page, total);
-    await page.waitForTimeout(800);
+    // One gesture: the stage fills the screen, the chat flies, chapter 2 plays
+    // with the kittens, and it rests on stop 2.
+    await swipeUp(page, viewport);
+    await page.waitForTimeout(250);
+    const s2 = await storyState(page);
+    record(viewport.name, route, "swipe/wheel plays on to stop 2", s2?.target !== null && Math.abs((s2?.target ?? 0) - s2.stops[1]) < 1e-3, `target ${s2?.target?.toFixed?.(2)}`);
+    await page.waitForTimeout(900);
+    const chatOn = await page.$eval("[data-el='flight']", (el) => getComputedStyle(el).visibility === "visible").catch(() => false);
+    record(viewport.name, route, "the WhatsApp chat flies in", chatOn);
+    await page.screenshot({ path: join(OUT, `landing-${viewport.name}-03-flight.png`) });
+    let kittens = 0;
+    for (let i = 0; i < 120; i++) {
+      const n = await page.$$eval("[data-el='card']", (cards) => cards.filter((c) => getComputedStyle(c).visibility === "visible").length);
+      kittens = Math.max(kittens, n);
+      if (kittens === 5) {
+        await page.screenshot({ path: join(OUT, `landing-${viewport.name}-04-kittens.png`) });
+        break;
+      }
+      await page.waitForTimeout(100);
+    }
+    record(viewport.name, route, "five kitten polaroids arrive in chapter 2", kittens === 5, `${kittens} seen`);
+    await waitRest(page);
+    const s3 = await storyState(page);
+    const topNow = await page.$eval("[data-swipe-story]", (el) => Math.round(el.getBoundingClientRect().top));
+    record(viewport.name, route, "rests on stop 2, full screen", Math.abs(s3.t - s3.stops[1]) < 1e-3 && Math.abs(topNow) <= 2 && s3.mode === "engaged", `t=${s3.t.toFixed(2)} top=${topNow} mode=${s3.mode}`);
+    await page.waitForTimeout(700);
+    const leftOver = await page.$$eval("[data-el='card']", (cards) => cards.filter((c) => getComputedStyle(c).visibility === "visible").length);
+    record(viewport.name, route, "caption 2 set, kittens gone", (await captionShown(page, "Five by dawn")) > 0.95 && leftOver === 0, `${leftOver} cards left`);
+    await page.screenshot({ path: join(OUT, `landing-${viewport.name}-05-stop2.png`) });
+
+    // Hold to pause, drag to scrub, release to carry on.
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(450);
+    const cx = viewport.width / 2;
+    const cy = viewport.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.waitForTimeout(420);
+    const h1 = await storyState(page);
+    const hs1 = await storySig(page);
+    await page.waitForTimeout(400);
+    const h2 = await storyState(page);
+    const hs2 = await storySig(page);
+    record(viewport.name, route, "hold pauses (playhead and frames stop)", h1?.holding && h1.t === h2.t && hs1 === hs2, `t ${h1?.t.toFixed(2)} → ${h2?.t.toFixed(2)}`);
+    await page.screenshot({ path: join(OUT, `landing-${viewport.name}-06-paused.png`) });
+    await page.mouse.move(cx, cy + viewport.height * 0.3, { steps: 6 });
+    await page.waitForTimeout(150);
+    const h3 = await storyState(page);
+    const hs3 = await storySig(page);
+    record(viewport.name, route, "drag while holding scrubs", h3.t < h2.t - 0.3 && hs3 !== hs2, `t ${h2.t.toFixed(2)} → ${h3.t.toFixed(2)}`);
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const h4 = await storyState(page);
+    record(viewport.name, route, "release carries on", !h4.holding && h4.target !== null, `target ${h4.target?.toFixed?.(2)}`);
+    await waitRest(page);
+
+    // ↑ goes back a chapter.
+    const atStop = await storyState(page);
+    await page.keyboard.press("ArrowUp");
+    await waitRest(page);
+    const back = await storyState(page);
+    const k = atStop.stops.findIndex((s) => Math.abs(s - atStop.t) < 1e-3);
+    record(viewport.name, route, "↑ goes back a chapter", k > 0 && Math.abs(back.t - atStop.stops[k - 1]) < 1e-3, `t ${atStop.t.toFixed(2)} → ${back.t.toFixed(2)}`);
+
+    // Skip hands the page back: StoryEnd on screen, its buttons reachable.
+    const skip = await hitTest(page, "[data-swipe-story] [data-el='skip']");
+    record(viewport.name, route, "Skip story reachable", skip.ok, skip.detail);
+    await page.click("[data-swipe-story] [data-el='skip']");
+    await page.waitForTimeout(1500);
+    const released = await storyState(page);
+    const endTop = await page.$eval("[data-story-end]", (el) => Math.round(el.getBoundingClientRect().top)).catch(() => 9999);
+    record(viewport.name, route, "Skip releases the page to the end", released.mode === "released" && Math.abs(endTop) <= 4, `mode=${released.mode} end top=${endTop}`);
     await page.screenshot({ path: join(OUT, `landing-${viewport.name}-09-bottom.png`) });
     for (const label of ["Kitty Stories", "Kitty Store"]) {
-      const link = await page.$(`main a:has-text("${label}")`);
+      const sel = `main a:has-text("${label}")`;
+      const link = await page.$(sel);
       const box = link ? await link.boundingBox() : null;
       record(viewport.name, route, `bottom button "${label}"`, !!box && box.height >= 56, box ? `${Math.round(box.width)}×${Math.round(box.height)}` : "missing");
+      const hit = await hitTest(page, sel);
+      record(viewport.name, route, `bottom button "${label}" reachable`, hit.ok, hit.detail);
     }
+    // Released: the page scrolls normally again (a little way back up).
+    const y0 = await page.evaluate(() => window.scrollY);
+    await page.mouse.move(viewport.width / 2, viewport.height / 2);
+    await page.mouse.wheel(0, -160);
+    await page.waitForTimeout(900);
+    const y1 = await page.evaluate(() => window.scrollY);
+    const still = await storyState(page);
+    record(viewport.name, route, "page scrolls natively after the story", y1 < y0 - 40 && still.mode === "released", `${Math.round(y0)} → ${Math.round(y1)}, mode=${still.mode}`);
     const camera = await page.$('a[aria-label="Try on Kitty merch with your camera"], button[aria-label="Try on Kitty merch with your camera"]');
     record(viewport.name, route, "floating camera visible after scroll", !!camera && (await camera.isVisible()));
 
@@ -218,17 +366,53 @@ async function journeyLanding(browser, viewport) {
     await page.waitForTimeout(1800);
     const after = await page.evaluate(() => window.scrollY);
     record(viewport.name, route, "Scroll to top moves the page", after < before - 200, `${Math.round(before)} → ${Math.round(after)}`);
+    const again = await storyState(page);
+    record(viewport.name, route, "back at the top, chapter 1 plays again", again.mode === "intro" && (again.target === again.stops[0] || again.t === again.stops[0]), `mode=${again.mode} t=${again.t.toFixed(2)}`);
 
     // Reload: still no errors, hero still paints.
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
-    await checkCanvases(page, viewport.name, route, "hero canvas painted after reload");
+    await checkCanvases(page, viewport.name, route, "hero canvas painted after reload", "main > section:first-child canvas");
 
     record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     record(viewport.name, route, "no horizontal overflow", overflow <= 1, `${overflow}px`);
   });
+}
+
+/** prefers-reduced-motion: stills joined by crossfades, captions already set, no flights. */
+async function journeyLandingReduced(browser, viewport) {
+  const route = "/ (reduced motion)";
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+    deviceScaleFactor: viewport.mobile ? 2 : 1,
+    isMobile: viewport.mobile,
+    hasTouch: viewport.mobile,
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  try {
+    await goto(page, "/");
+    const started = await page.waitForFunction(() => window.__swipeStory?.debugState()?.started, null, { timeout: 30_000 }).then(() => true, () => false);
+    const s = await storyState(page);
+    record(viewport.name, route, "rests on chapter 1 at once", started && s.t === 0 && s.target === null, `t=${s?.t}`);
+    record(viewport.name, route, "caption 1 set without animation", (await captionShown(page, "A cold night")) > 0.95);
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(250);
+    const flying = await page.$eval("[data-el='flight']", (el) => getComputedStyle(el).visibility === "visible");
+    await waitRest(page);
+    const s2 = await storyState(page);
+    record(viewport.name, route, "↓ crossfades to chapter 2, no chat flight", !flying && Math.abs(s2.t - s2.stops[1]) < 1e-3, `t=${s2.t.toFixed(2)}`);
+    await page.waitForTimeout(300);
+    record(viewport.name, route, "caption 2 set", (await captionShown(page, "Five by dawn")) > 0.95);
+    await page.screenshot({ path: join(OUT, `landing-${viewport.name}-reduced.png`) });
+    record(viewport.name, route, "no page errors", errors.length === 0, errors.slice(0, 2).join(" | "));
+  } finally {
+    await context.close();
+  }
 }
 
 async function journeyStore(browser, viewport) {
@@ -357,6 +541,7 @@ async function main() {
     for (const v of VIEWPORTS) {
       console.log(`\n── ${v.name} (${v.width}×${v.height}) ──`);
       await journeyLanding(browser, v);
+      await journeyLandingReduced(browser, v);
       await journeyStore(browser, v);
       await journeyStories(browser, v);
       await journeyTryOn(browser, v);

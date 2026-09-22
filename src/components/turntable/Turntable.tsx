@@ -31,7 +31,7 @@ import {
   type FrameManifest,
 } from "@/components/story/frameLoader";
 import { cappedDpr, prefersReducedMotion } from "@/components/story/motion";
-import CatSilhouette from "@/components/story/transitions/CatSilhouette";
+import CatSilhouette from "./CatSilhouette";
 
 const SIZE = "min(86vw, 420px)";
 /** Virtual frame count for the placeholder disc. */

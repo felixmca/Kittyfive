@@ -254,13 +254,19 @@ async function buildUi(bin) {
 
   // ui/whatsapp/*.jpg: the neighbours' chat, ALREADY BLURRED (names, numbers,
   // avatars, house number). The unblurred original lives in ui/whatsapp/original/
-  // and is never read here. The sidecar JSON says where the photo sits in it.
+  // and is never read here. The sidecar JSON says where the photo sits in it;
+  // only those numbers are published, because the sidecar's notes and keys
+  // can name the neighbours.
   const chat = newest(join(ui, "whatsapp"), IMAGE_EXT);
   const chatOut = join(PUB, "story", "whatsapp-chat.webp");
-  if (chat && mtime(chat) > mtime(chatOut)) {
+  const sidecar = join(ui, "whatsapp", "whatsapp-chat.json");
+  if (chat && Math.max(mtime(chat), mtime(sidecar)) > mtime(chatOut)) {
     await S(await readable(chat)).rotate().webp({ quality: 84 }).toFile(chatOut);
-    const sidecar = join(ui, "whatsapp", "whatsapp-chat.json");
-    if (existsSync(sidecar)) writeFileSync(join(PUB, "story", "whatsapp-chat.json"), readFileSync(sidecar, "utf8"));
+    if (existsSync(sidecar)) {
+      const { width, height, photo } = JSON.parse(readFileSync(sidecar, "utf8"));
+      const rect = photo && { x: photo.x, y: photo.y, w: photo.w, h: photo.h };
+      writeFileSync(join(PUB, "story", "whatsapp-chat.json"), JSON.stringify({ width, height, photo: rect }, null, 2));
+    }
     console.log("[ui] whatsapp-chat.webp");
   }
 

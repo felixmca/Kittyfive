@@ -10,7 +10,7 @@ Everything a non-developer edits lives in `src/config/*`:
 | File | Owns |
 |---|---|
 | `src/config/site.ts` | name, tagline, nav labels/hrefs, places |
-| `src/config/story.ts` | the ordered scenes (`STORY`), turntable settings |
+| `src/config/story.ts` | the four landing chapters (`STORY`: titles, captions, entrances), the WhatsApp chat and where its photo lands, the kitten photos, turntable settings |
 | `src/config/products.ts` | the three products, variants, prices (pence), shipping, the £1 snack |
 | `src/config/stories.ts` | short "Kitty Stories" vignettes for `/stories` |
 | `src/config/kitty.ts` | Kitty's chat persona (system prompt), opening line "Check this out" |
@@ -19,7 +19,7 @@ Everything a non-developer edits lives in `src/config/*`:
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing: hero camera (top third) → scroll story → 360° turntable → two buttons |
+| `/` | Landing: hero camera (top third) → swipe story (four chapters) → 360° turntable → two buttons |
 | `/stories` | Kitty Stories: vignettes, updated over time |
 | `/store` | The in-game store: 3D living room, Kitty presents products, chat dock, next/prev, buy |
 | `/try-on` | Camera try-on: live camera + merch overlay + Kitty beside the person |
@@ -47,7 +47,8 @@ toast, showToast(msg)
 | `src/components/smooth/SmoothScroll.tsx` | `default SmoothScroll({children})` | Lenis + `gsap.ticker`, `ScrollTrigger.scrollerProxy` not needed (Lenis drives native scroll). Respects reduced motion. Exposes `window.__lenis` for scroll-to helpers. |
 | `src/components/chrome/*` | `default Chrome()` | Fixed top-right translucent **three-line-stack** button; side drawer with `Kitty Stories`, `Kitty Store`, `Scroll to top`, `Scroll to bottom`; floating small camera button (bottom-right) that opens the try-on. Rendered on every page via `src/app/layout.tsx`? **No** — rendered by each page so the landing can hide the small camera while the hero camera is on screen. |
 | `src/components/hero/*` | `default Hero()` | R3F canvas filling the **top third of a phone screen** (`h-[34dvh]`): a stylised camera model that spins slowly, tilts, and bounces slightly; tap → `/try-on`. Title `Kitty`, tagline, scroll cue. Build the camera procedurally from primitives (body box, lens cylinders, flash, strap) so there is no licence and no download; a GLB at `/models/camera.glb` overrides it if present. |
-| `src/components/story/*` | `default Story()`, `default StoryEnd()` | The scroll engine. Per scene: a full-viewport pinned section (`pinLength` × 100dvh), a `<canvas>` painting the WebP frame sequence from `/story/<id>/manifest.json` scrubbed by ScrollTrigger progress, beats fading in one by one, transitions per `enter`/`exit`. Scenes with no manifest render a designed placeholder (kicker, title, beats on a gradient) so the page is complete with zero assets. Preload the next scene's frames while the current is pinned; decode with `createImageBitmap`; cap in-memory frames to ~3 scenes. `StoryEnd` = Turntable + the two big buttons. |
+| `src/components/landing/SwipeStory/*` | `default SwipeStory()` | The landing story, played by swipes (since 23 Sep 2026; it replaced the scroll-scrubbed engine). One 100dvh stage under the hero: a canvas for the clip frames plus DOM layers for the choreography. `timeline.ts` turns the chapters into one timeline of seconds with a **stop** per chapter and makes every visual a pure function of the playhead (so reversing and hold-and-drag scrubbing need nothing special); `engine.ts` owns the playhead, the gestures (swipe, wheel, keys, press-and-hold to pause, drag to scrub) and the page modes (intro under the hero → engaged full screen → released after the last stop or Skip); `painter.ts` draws frames (blended pairs, cover on phones, a 9:16 column over a blurred copy when wide); `overlays.ts` writes the WhatsApp flight, the kitten polaroids and clock, the MISSING flyer, the stand-in moods, the assembling captions and the rail; `media.ts` loads `index.json`, manifests, every chapter's final frame and the frames near the chapter being watched. Chapters without a clip play a designed stand-in and pick their clip up after `npm run story`. `prefers-reduced-motion`: stills and crossfades, captions already set. `window.__swipeStory.debugState()` / `debugSeek(t)` exist for `scripts/verify.mjs`. |
+| `src/components/story/*` | `default StoryEnd()`, frame loading | `StoryEnd` = Turntable + the two big buttons. `frameLoader.ts` (limiter, manifests, decode) and `useFrameSequence.ts` (`SequenceController`) are shared by SwipeStory, the chapter reader and the turntable. |
 | `src/components/turntable/*` | `default Turntable()` | Swipe/drag to spin Kitty using N photos from `/turntable/manifest.json`; inertia; falls back to a single placeholder silhouette when absent. |
 | `src/components/store/*` + `src/app/store/page.tsx` | `default StoreScene()` | R3F living room (a placeholder room built from primitives until `/models/room.glb` exists — window with river light, sofa, kitchen counter), Kitty NPC (`/models/kitty.glb` if present, else a procedural black-and-white cat) walking between "presentation spots", the current product floating and rotating beside her, `Next`/`Previous` arrows, product panel (name, method, price, variant picker, **Buy** → `POST /api/checkout`), chat dock. Kitty always opens with `KITTY.opening` ("Check this out"). |
 | `src/components/chat/*` + `src/app/api/chat/route.ts` | `default ChatDock()` | Streams from `/api/chat` (Claude, see below). Keeps last 12 turns client-side. Product context injected server-side from `productIndex` sent with each message. |
@@ -89,6 +90,8 @@ role key on the server; the browser never writes them. RLS on, no client policie
 |---|---|---|
 | `public/story/<scene-id>/0001..NNNN.webp` + `manifest.json` | frame sequences | `npm run story` from `assets-raw/story/<id>/clip.mp4` |
 | `public/story/index.json` | which scenes have media | same |
+| `public/story/whatsapp-chat.webp` + `.json` | the neighbours' chat, blurred, and where its photo sits (layout numbers only) | same, from `assets-raw/ui/whatsapp/`; `node scripts/align-chat.mjs` measures where that photo lands in clip 1's final frame |
+| `public/story/flyer.webp` | the real MISSING flyer (a drawn one until then) | same, from `assets-raw/ui/flyer/` |
 | `public/turntable/*.webp` + `manifest.json` | 360° photos | same, from `assets-raw/turntable/*.jpg` |
 | `public/products/*.png` | mockups (transparent) | provider mockup generator or Photoroom |
 | `public/models/{camera,kitty,room}.glb` | 3D | Blender / scan pipeline (later) |

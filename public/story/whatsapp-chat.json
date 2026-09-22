@@ -5,19 +5,6 @@
     "x": 106,
     "y": 715,
     "w": 608,
-    "h": 811,
-    "note": "Delaram's photo of Kitty = 01-a-cold-night end frame = 02-five-by-dawn start frame. Measured by eye; refine if the landing shows a seam."
-  },
-  "redacted": [
-    "groupAvatar",
-    "headerNamesAndNumber",
-    "alexName",
-    "alexNumber",
-    "alexAvatar",
-    "alexHouseNumber",
-    "delaramName",
-    "delaramNumber",
-    "delaramAvatar",
-    "felixHouseNumber"
-  ]
+    "h": 811
+  }
 }

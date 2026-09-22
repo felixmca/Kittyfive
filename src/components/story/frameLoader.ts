@@ -13,6 +13,8 @@ export interface FrameManifest {
   height: number;
   /** printf-style, e.g. "%04d.webp". Defaults to "%04d.webp". */
   pattern?: string;
+  /** Seconds of the clip the frames were cut from, when the pipeline knew it. */
+  duration?: number;
 }
 
 export type FrameImage = ImageBitmap | HTMLImageElement;
@@ -122,6 +124,7 @@ export function fetchManifest(dir: string, signal?: AbortSignal): Promise<FrameM
         width: typeof json.width === "number" ? json.width : 720,
         height: typeof json.height === "number" ? json.height : 1280,
         pattern: typeof json.pattern === "string" ? json.pattern : "%04d.webp",
+        duration: typeof json.duration === "number" && json.duration > 0 ? json.duration : undefined,
       };
     } catch {
       return null;

@@ -1,0 +1,503 @@
+/* The swipe story's stage. Everything that moves is written inline by the
+   engine from the playhead (transform/opacity only); this file holds the
+   static look, and the few states the engine flips as data attributes:
+   data-mode (intro | engaged | released), data-hint, data-holding,
+   data-splash, data-wide, data-reduced. */
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg, #0b0b0c);
+  isolation: isolate;
+  touch-action: pinch-zoom;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+}
+
+.stage[data-holding="true"] {
+  cursor: grabbing;
+}
+
+.stage[data-mode="released"] {
+  touch-action: auto;
+  cursor: auto;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ─── stand-in moods ───────────────────────────────────────────────────── */
+
+.rain {
+  visibility: hidden;
+  opacity: 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='800'%3E%3Cg stroke='%23d6e2ff' stroke-linecap='round' stroke-width='1.2' opacity='.55'%3E%3Cpath d='M22 40l-5 30M96 180l-5 30M170 90l-5 30M250 300l-5 30M330 60l-5 30M60 420l-5 30M140 520l-5 30M220 640l-5 30M300 480l-5 30M380 700l-5 30M30 720l-5 30M200 250l-5 30M120 330l-5 30M360 380l-5 30M270 760l-5 30'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='600'%3E%3Cg stroke='%23c8d6ff' stroke-linecap='round' stroke-width='.8' opacity='.4'%3E%3Cpath d='M40 20l-3 20M110 130l-3 20M190 60l-3 20M260 240l-3 20M20 330l-3 20M150 410l-3 20M230 500l-3 20M80 560l-3 20M280 420l-3 20M170 280l-3 20'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 400px 800px, 300px 600px;
+  background-repeat: repeat;
+}
+
+/* Afternoon light off the river: a warm wash from the window side, a slow
+   band of reflected light drifting across, and faint ripple lines. */
+.river {
+  visibility: hidden;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background-image:
+    radial-gradient(130% 70% at 88% 12%, rgba(255, 186, 110, 0.55) 0%, rgba(255, 160, 90, 0.2) 45%, rgba(255, 160, 90, 0) 75%),
+    linear-gradient(100deg, rgba(255, 236, 200, 0) 34%, rgba(255, 236, 200, 0.3) 47%, rgba(255, 236, 200, 0) 60%),
+    repeating-linear-gradient(177deg, rgba(255, 238, 210, 0) 0 11px, rgba(255, 238, 210, 0.09) 12px 13px, rgba(255, 238, 210, 0) 14px 26px),
+    linear-gradient(180deg, rgba(40, 70, 110, 0) 55%, rgba(60, 100, 150, 0.28) 100%);
+  background-size: 100% 100%, 640px 100%, 520px 100%, 100% 100%;
+  background-repeat: no-repeat, repeat-x, repeat-x, no-repeat;
+}
+
+/* ─── the WhatsApp flight ──────────────────────────────────────────────── */
+
+.flight {
+  visibility: hidden;
+  perspective: 900px;
+  perspective-origin: 50% 50%;
+}
+
+.chat {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 946px;
+  height: 2048px;
+  max-width: none;
+  transform-origin: 0 0;
+  border-radius: 34px;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.65);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* ─── the MISSING flyer ────────────────────────────────────────────────── */
+
+.flyer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.55));
+  will-change: transform, opacity;
+}
+
+/* ─── the kittens ──────────────────────────────────────────────────────── */
+
+.kittens {
+  visibility: hidden;
+}
+
+.card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  padding: 8px 8px 0;
+  border-radius: 3px;
+  background: #f7f3ea;
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+.card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #d9d3c6;
+}
+
+.card span {
+  display: block;
+  padding: 0.5em 0 0.65em;
+  text-align: center;
+  font-size: inherit;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1;
+  color: #2a2a2c;
+}
+
+.clock {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+}
+
+.clockInner {
+  display: flex;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: max(18px, env(safe-area-inset-top));
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+.clockLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg, #f4f1ea);
+  white-space: nowrap;
+}
+
+/* ─── captions ─────────────────────────────────────────────────────────── */
+
+.shade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 58%;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(11, 11, 12, 0.9) 0%,
+    rgba(11, 11, 12, 0.6) 38%,
+    rgba(11, 11, 12, 0) 100%
+  );
+}
+
+.bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 max(22px, env(safe-area-inset-left)) calc(14px + env(safe-area-inset-bottom));
+  padding-right: max(44px, env(safe-area-inset-right));
+  pointer-events: none;
+}
+
+.captions {
+  display: grid;
+}
+
+.caption {
+  grid-area: 1 / 1;
+  align-self: end;
+  max-width: 30rem;
+  visibility: hidden;
+  opacity: 0;
+}
+
+.stage[data-wide="true"] .bottom {
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.stage[data-wide="true"] .captions {
+  justify-items: center;
+  text-align: center;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent, #ffd166);
+  opacity: 0;
+}
+
+.title {
+  margin: 0;
+  font-weight: 600;
+  font-size: clamp(36px, 10vw, 64px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  color: var(--fg, #f4f1ea);
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.45);
+}
+
+.word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.ch {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+.subtitle {
+  margin: 12px 0 0;
+  max-width: 30ch;
+  font-size: 17px;
+  line-height: 1.45;
+  color: rgba(244, 241, 234, 0.92);
+  opacity: 0;
+}
+
+.stage[data-wide="true"] .subtitle {
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 19px;
+}
+
+/* ─── swipe hint ───────────────────────────────────────────────────────── */
+
+.hint {
+  display: flex;
+  height: 44px;
+  margin: 14px 0 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--muted, #9a958c);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.stage[data-hint="true"] .hint {
+  opacity: 1;
+}
+
+.chevron {
+  width: 10px;
+  height: 10px;
+  border-left: 1.5px solid currentColor;
+  border-top: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  animation: nudge 1.6s ease-in-out infinite;
+}
+
+@keyframes nudge {
+  0%,
+  100% {
+    transform: translateY(3px) rotate(45deg);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(-3px) rotate(45deg);
+    opacity: 1;
+  }
+}
+
+.hintFine {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hintTouch {
+    display: none;
+  }
+  .hintFine {
+    display: inline;
+  }
+}
+
+/* ─── progress rail ────────────────────────────────────────────────────── */
+
+.rail {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  top: 50%;
+  width: 8px;
+  height: 128px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.railLine,
+.railFill {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  margin-left: -0.5px;
+}
+
+.railLine {
+  background: rgba(244, 241, 234, 0.22);
+}
+
+.railFill {
+  background: var(--fg, #f4f1ea);
+  transform-origin: 50% 0;
+  transform: scaleY(0);
+}
+
+.dot {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border: 1px solid rgba(244, 241, 234, 0.7);
+  border-radius: 50%;
+  background: var(--bg, #0b0b0c);
+  transition:
+    transform 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.dot[data-on="true"] {
+  background: var(--fg, #f4f1ea);
+  transform: scale(1.3);
+}
+
+.stage[data-holding="true"] .rail {
+  opacity: 1;
+}
+
+.stage[data-mode="released"] .rail,
+.stage:not([data-ready="true"]) .rail {
+  opacity: 0;
+}
+
+/* ─── paused badge, skip ───────────────────────────────────────────────── */
+
+.paused {
+  position: absolute;
+  left: 50%;
+  top: max(18px, env(safe-area-inset-top));
+  margin: 0;
+  padding: 9px 16px;
+  border-radius: 999px;
+  transform: translate(-50%, -6px);
+  background: rgba(11, 11, 12, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--fg, #f4f1ea);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.stage[data-holding="true"] .paused {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.skip {
+  position: absolute;
+  left: max(14px, env(safe-area-inset-left));
+  top: max(14px, env(safe-area-inset-top));
+  z-index: 5;
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg, #f4f1ea);
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.skip:focus-visible {
+  outline: 2px solid var(--accent, #ffd166);
+  outline-offset: 2px;
+}
+
+.stage[data-mode="released"] .skip {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ─── loading splash ───────────────────────────────────────────────────── */
+
+.splash {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg, #0b0b0c);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.35s ease,
+    visibility 0.35s ease;
+}
+
+.stage[data-splash="true"] .splash {
+  opacity: 1;
+  visibility: visible;
+}
+
+.splash p {
+  margin: 0;
+  font-size: clamp(40px, 12vw, 76px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  color: var(--fg, #f4f1ea);
+}
+
+.bar {
+  width: min(220px, 56%);
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(244, 241, 234, 0.14);
+}
+
+.barFill {
+  height: 100%;
+  background: var(--accent, #ffd166);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 0.2s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    animation: none;
+  }
+}

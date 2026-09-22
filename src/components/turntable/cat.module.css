@@ -1,0 +1,55 @@
+/* The drawn cat's walk: the one timer-driven thing (a walk cycle cannot be
+   scrubbed and still read as walking). */
+
+.catSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.leg {
+  transform-box: view-box;
+}
+
+/* Diagonal gait: legA pair and legB pair are half a cycle apart. */
+.walk .legA,
+.walk .legB {
+  animation: step 0.62s ease-in-out infinite;
+}
+
+.walk .legB {
+  animation-delay: -0.31s;
+}
+
+.walk .torso {
+  animation: bob 0.31s ease-in-out infinite alternate;
+  transform-box: view-box;
+}
+
+@keyframes step {
+  0%,
+  100% {
+    transform: rotate(-22deg);
+  }
+  50% {
+    transform: rotate(22deg);
+  }
+}
+
+@keyframes bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-1.6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .walk .legA,
+  .walk .legB,
+  .walk .torso {
+    animation: none;
+  }
+}

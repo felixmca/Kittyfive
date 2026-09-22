@@ -1,12 +1,12 @@
 "use client";
 /**
  * A side-view black-and-white cat built from paths, facing right. Legs are
- * grouped so a parent `.walk` class (see transitions.module.css) animates a
+ * grouped so a parent `.walk` class (see cat.module.css) animates a
  * diagonal gait; without it she stands still. Colours are props so the same
  * shape works as a dark cut-out over photos and as a cream mark on glass.
  */
 import type { CSSProperties } from "react";
-import styles from "./transitions.module.css";
+import styles from "./cat.module.css";
 
 interface Props {
   /** Adds the walk class on the svg itself; overlays toggle it on a parent instead. */

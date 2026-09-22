@@ -1,131 +1,112 @@
 /**
- * Kitty's landing story: six chapters the scroll engine plays in order, one
- * Kling clip each (docs/HANDOVER-01-STORY-ASSETS.md).
+ * Kitty's landing story: four chapters, one AI clip each, chained so that
+ * every clip starts on the previous clip's final frame
+ * (docs/HANDOVER-01-STORY-ASSETS.md). The landing plays them as swipe-driven
+ * flows (src/components/landing/SwipeStory): one swipe plays from one
+ * chapter's stop to the next, and each chapter's title and subtitle assemble
+ * as it finishes.
  *
- * Each scene's id is its folder: scripts/build-story.mjs turns
- * assets-raw/story/<id>/clip/ (the artta clip) into a WebP frame sequence in
- * public/story/<id>/, and assets-raw/story/<id>/start-frame/ into
- * public/story/<id>/still.webp, the fallback poster. A scene with neither
- * shows a designed placeholder, so the page never breaks while clips are
- * still being made.
+ * Each chapter's id is its folder: scripts/build-story.mjs turns
+ * assets-raw/story/<id>/clip/ into WebP frames in public/story/<id>/ and lists
+ * the chapter in public/story/index.json. A chapter that is not listed yet
+ * plays a designed stand-in (`standIn`), so the page is complete before its
+ * clip exists, and picks the clip up by itself once `npm run story` has run.
  *
- * The same six chapters live in the Stories page too (supabase/seed/kitty.sql),
- * each in the volume that fits it; their scenes point at the same folders.
- *
- * `beats` are the lines of text that fade in, in order, while the scene is
- * pinned. `enter`/`exit` name the transition between neighbouring scenes.
+ * The same four chapters live on the Stories page too
+ * (supabase/seed/kitty.sql, src/config/stories.ts), each in its volume.
  */
 
-export type SceneTransition =
-  | "crossfade" // default
-  | "walk-out-of-frame" // Kitty cut-out walks from this scene's frame into the next
-  | "fall" // an element (the flyer) falls through the frame
-  | "slide-up"
-  | "zoom";
+/** How the story gets from the previous chapter's stop into this chapter. */
+export type ChapterEntrance =
+  | "none" // the first chapter: it plays as the page loads
+  | "whatsapp" // the neighbours' chat airdrops in, frames the photo, zooms into it
+  | "flyer" // the MISSING flyer drops in over the join
+  | "crossfade";
 
-export type SceneMedia =
-  | { kind: "sequence"; fallbackPoster?: string } // frames live in public/story/<id>/
-  | { kind: "image"; src: string }
-  | { kind: "none" };
-
-export interface StoryScene {
+export interface LandingChapter {
   id: string;
-  /** Short kicker shown above the beats, e.g. a date. */
-  kicker?: string;
   title: string;
-  beats: string[];
-  media: SceneMedia;
-  enter?: SceneTransition;
-  exit?: SceneTransition;
-  /** How many viewport-heights of scroll this scene is pinned for. */
-  pinLength?: number;
-  /** Aspect of the generated clip. Mobile story is 9:16 by default. */
-  aspect?: "9:16" | "4:5" | "1:1";
-  /** Optional: a transparent PNG cut-out of Kitty used by walk-out-of-frame. */
-  cutout?: string;
+  subtitle: string;
+  /** Small line above the title: when and where. */
+  kicker: string;
+  enter: ChapterEntrance;
+  /** Seconds the clip plays over. Default: the clip's own length. */
+  playback?: number;
+  /** Real photos choreographed over the clip. */
+  overlay?: "kittens";
+  /** The look of the stand-in while the chapter has no clip. */
+  standIn: "night" | "river";
+  /** The stand-in shows this chapter's final frame (default: the previous chapter's). */
+  standInFrame?: string;
 }
 
-export const STORY: StoryScene[] = [
+export const STORY: LandingChapter[] = [
   {
     id: "01-a-cold-night",
-    kicker: "January 2025 · Smith Close, SE16",
     title: "A cold night",
-    beats: [
-      "One cold January night, a black-and-white cat walked in through our back door.",
-      "She did not ask. She just came in.",
-      "We called her Kitty because we weren't sure we'd keep her.",
-      "She stayed.",
-    ],
-    media: { kind: "sequence", fallbackPoster: "/story/01-a-cold-night/still.webp" },
-    exit: "zoom",
-    pinLength: 2.6,
+    subtitle: "She did not ask. She just came in. She stayed.",
+    kicker: "January 2025 · Smith Close, SE16",
+    enter: "none",
+    standIn: "night",
   },
   {
     id: "02-five-by-dawn",
-    kicker: "14 April 2025 · 12:30am",
     title: "Five by dawn",
-    beats: [
-      "At half past midnight, in a cardboard box in the bedroom cupboard, the first kitten arrived.",
-      "Then another, every thirty minutes.",
-      "By dawn there were five.",
-      "She raised them in that cupboard, until every one was adopted and the box was empty again.",
-    ],
-    media: { kind: "sequence", fallbackPoster: "/story/02-five-by-dawn/still.webp" },
-    exit: "walk-out-of-frame",
-    pinLength: 2.8,
+    subtitle: "Half past midnight, a cardboard box, one kitten every thirty minutes.",
+    kicker: "14 April 2025 · 12:30am",
+    enter: "whatsapp",
+    // A touch slower than the 5.05 s clip so five kittens can arrive.
+    playback: 6,
+    overlay: "kittens",
+    standIn: "night",
   },
   {
-    id: "03-a-flat-on-the-thames",
-    kicker: "November 2025 · Pacific Wharf",
-    title: "A flat on the Thames",
-    beats: [
-      "In November we moved to a ground-floor flat on the river.",
-      "New windows. New smells. The same cat on the same sofa.",
-    ],
-    media: { kind: "sequence", fallbackPoster: "/story/03-a-flat-on-the-thames/still.webp" },
-    enter: "walk-out-of-frame",
-    exit: "fall",
-    pinLength: 2.2,
-    cutout: "/story/cutouts/kitty-walk.png",
+    id: "03-missing-found",
+    title: "Missing, Found",
+    subtitle: "Four months of flyers. Then a neighbour, some snacks, and a phone call.",
+    kicker: "December 2025 – April 2026",
+    enter: "flyer",
+    standIn: "night",
   },
   {
-    id: "04-thousands-of-flyers",
-    kicker: "23 December 2025",
-    title: "Thousands of flyers",
-    beats: [
-      "Two days before Christmas we were away for three nights.",
-      "The building manager fed her every morning and every evening.",
-      "She thought we had left her. She went missing.",
-      "Thousands of flyers. Every letterbox we could reach. Rainy nights. Wet paper. Four months.",
-    ],
-    media: { kind: "sequence", fallbackPoster: "/story/04-thousands-of-flyers/still.webp" },
-    enter: "fall",
-    pinLength: 3,
-  },
-  {
-    id: "05-and-there-she-was",
-    kicker: "April 2026",
-    title: "And there she was",
-    beats: [
-      "Four months later, a neighbour saw a flyer, lured her inside with some snacks, and called.",
-      "I cycled over as fast as I could.",
-      "And there she was. Like she had nothing to say. Just a faint recognition.",
-      "That's Kitty sometimes. A subtle type of love.",
-    ],
-    media: { kind: "sequence", fallbackPoster: "/story/05-and-there-she-was/still.webp" },
-    exit: "slide-up",
-    pinLength: 3,
-  },
-  {
-    id: "06-next-to-me",
-    kicker: "Now",
-    title: "Next to me",
-    beats: ["She's been next to me the entire time I've been building this."],
-    media: { kind: "sequence", fallbackPoster: "/story/06-next-to-me/still.webp" },
-    enter: "slide-up",
-    pinLength: 1.8,
+    id: "04-riverside-sofa",
+    title: "Riverside sofa",
+    subtitle: "She's been next to me the entire time I've been building this.",
+    kicker: "Pacific Wharf · now",
+    enter: "crossfade",
+    standIn: "river",
+    // Until the sofa clip exists: her at home, a hand on her head, in warm river light.
+    standInFrame: "01-a-cold-night",
   },
 ];
+
+/** The neighbours' WhatsApp chat (published blurred) that flies in before chapter 2. */
+export const WHATSAPP = {
+  src: "/story/whatsapp-chat.webp",
+  width: 946,
+  height: 2048,
+  /** The photo inside the screenshot, in screenshot pixels (public/story/whatsapp-chat.json). */
+  photo: { x: 106, y: 715, w: 608, h: 811 },
+  /**
+   * Where that photo sits in chapter 1's final frame, in 576×1024 frame
+   * pixels (measured by `node scripts/align-chat.mjs`; the frame is a centre
+   * crop of the photo). The flight lands exactly on it, so the chat can hand
+   * over to the frame without a visible jump. Re-measure if clip 1 changes.
+   */
+  landsOn: { x: -96.4, y: -0.5, w: 770.8, h: 1028.1 },
+};
+
+/** Chapter 2's real kitten photos, in the order they arrive (one every thirty minutes). */
+export const KITTENS = [
+  { src: "/story/02-five-by-dawn/extras/kittens1.webp", time: "12:30" },
+  { src: "/story/02-five-by-dawn/extras/kittens2.webp", time: "1:00" },
+  { src: "/story/02-five-by-dawn/extras/kittens3.webp", time: "1:30" },
+  { src: "/story/02-five-by-dawn/extras/kittens4.webp", time: "2:00" },
+  { src: "/story/02-five-by-dawn/extras/kittens5.webp", time: "2:30" },
+];
+
+/** The real MISSING flyer, once assets-raw/ui/flyer has one; a drawn flyer until then. */
+export const FLYER_SRC = "/story/flyer.webp";
 
 /** The 360° turntable at the end of the story: N photos in public/turntable/. */
 export const TURNTABLE = {

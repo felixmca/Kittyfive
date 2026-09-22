@@ -5,7 +5,7 @@
  * Stories page) once the site is live. Keep the two in step when changing
  * the seed.
  *
- * Volumes are in reading order. Each of the six landing chapters sits in the
+ * Volumes are in reading order. Each of the four landing chapters sits in the
  * volume that fits it and plays the frames built from
  * assets-raw/story/<folder>/ (see docs/HANDOVER-01-STORY-ASSETS.md).
  */
@@ -147,9 +147,11 @@ interface ChapterSeed {
   kicker: string;
   beats: string[];
   transition: SceneTransition;
+  /** The tile's two pictures (null until the chapter has media). */
+  tiles?: [string, string];
 }
 
-/** The six landing chapters, in landing order. */
+/** The four landing chapters, in landing order (supabase/seed/kitty.sql). */
 const CHAPTERS: ChapterSeed[] = [
   {
     slug: "a-cold-night",
@@ -157,7 +159,7 @@ const CHAPTERS: ChapterSeed[] = [
     folder: "01-a-cold-night",
     title: "A cold night",
     dateLabel: "January 2025",
-    subtitle: "She did not ask. She just came in.",
+    subtitle: "She did not ask. She just came in. She stayed.",
     description: "The night a black-and-white cat walked in through the back door at Smith Close, and stayed.",
     kicker: "January 2025 · Smith Close, SE16",
     beats: [
@@ -167,6 +169,7 @@ const CHAPTERS: ChapterSeed[] = [
       "She stayed.",
     ],
     transition: "zoom",
+    tiles: ["/story/01-a-cold-night/still.webp", "/story/01-a-cold-night/extras/end-frame.webp"],
   },
   {
     slug: "five-by-dawn",
@@ -174,7 +177,7 @@ const CHAPTERS: ChapterSeed[] = [
     folder: "02-five-by-dawn",
     title: "Five by dawn",
     storyDate: "2025-04-14",
-    subtitle: "One every thirty minutes from half past midnight.",
+    subtitle: "Half past midnight, a cardboard box, one kitten every thirty minutes.",
     description:
       "A cardboard box in the bedroom cupboard, five kittens by dawn, and a cat who had clearly done the maths.",
     kicker: "14 April 2025 · 12:30am",
@@ -185,66 +188,42 @@ const CHAPTERS: ChapterSeed[] = [
       "She raised them in that cupboard, until every one was adopted and the box was empty again.",
     ],
     transition: "walk-out-of-frame",
+    tiles: ["/story/02-five-by-dawn/extras/end-frame.webp", "/story/02-five-by-dawn/extras/kittens1.webp"],
   },
   {
-    slug: "a-flat-on-the-thames",
-    volume: "the-sofa-on-the-river",
-    folder: "03-a-flat-on-the-thames",
-    title: "A flat on the Thames",
-    dateLabel: "November 2025",
-    subtitle: "New windows. New smells. The same cat on the same sofa.",
-    description: "The move to a ground-floor flat on the river at Pacific Wharf.",
-    kicker: "November 2025 · Pacific Wharf",
+    slug: "missing-found",
+    volume: "the-neighbour",
+    folder: "03-missing-found",
+    title: "Missing, Found",
+    dateLabel: "December 2025 – April 2026",
+    subtitle: "Four months of flyers. Then a neighbour, some snacks, and a phone call.",
+    description:
+      "Two days before Christmas she went missing. Four months of flyers, rainy nights and wet paper, until a neighbour saw one, put some snacks down, and called.",
+    kicker: "23 December 2025 – April 2026",
     beats: [
-      "In November we moved to a ground-floor flat on the river.",
-      "New windows. New smells. The same cat on the same sofa.",
+      "Two days before Christmas we were away for three nights. The building manager fed her every morning and every evening.",
+      "She thought we had left her. She went missing.",
+      "Thousands of flyers. Every letterbox we could reach. Rainy nights. Wet paper. Four months.",
+      "Then a neighbour saw a flyer, lured her inside with some snacks, and called.",
+      "I cycled over as fast as I could. And there she was. That's Kitty sometimes. A subtle type of love.",
     ],
     transition: "fall",
   },
   {
-    slug: "thousands-of-flyers",
-    volume: "what-the-flyer-said",
-    folder: "04-thousands-of-flyers",
-    title: "Thousands of flyers",
-    dateLabel: "December 2025 – April 2026",
-    subtitle: "Every letterbox we could reach.",
-    description: "Two days before Christmas she went missing. Four months of rainy nights and wet paper.",
-    kicker: "23 December 2025",
+    slug: "riverside-sofa",
+    volume: "the-sofa-on-the-river",
+    folder: "04-riverside-sofa",
+    title: "Riverside sofa",
+    dateLabel: "November 2025 – now",
+    subtitle: "She's been next to me the entire time I've been building this.",
+    description:
+      "A ground-floor flat on the Thames at Pacific Wharf: new windows, new smells, and the same cat on the same sofa, next to me the whole time.",
+    kicker: "November 2025 – now · Pacific Wharf",
     beats: [
-      "Two days before Christmas we were away for three nights.",
-      "The building manager fed her every morning and every evening.",
-      "She thought we had left her. She went missing.",
-      "Thousands of flyers. Every letterbox we could reach. Rainy nights. Wet paper. Four months.",
+      "In November we moved to a ground-floor flat on the Thames.",
+      "New windows. New smells. The same cat on the same sofa.",
+      "She's been next to me the entire time I've been building this.",
     ],
-    transition: "crossfade",
-  },
-  {
-    slug: "and-there-she-was",
-    volume: "the-neighbour",
-    folder: "05-and-there-she-was",
-    title: "And there she was",
-    dateLabel: "April 2026",
-    subtitle: "A subtle type of love.",
-    description: "A neighbour saw a flyer, lured her in with snacks, and called. I cycled over as fast as I could.",
-    kicker: "April 2026",
-    beats: [
-      "Four months later, a neighbour saw a flyer, lured her inside with some snacks, and called.",
-      "I cycled over as fast as I could.",
-      "And there she was. Like she had nothing to say. Just a faint recognition.",
-      "That's Kitty sometimes. A subtle type of love.",
-    ],
-    transition: "slide-up",
-  },
-  {
-    slug: "next-to-me",
-    volume: "the-neighbour",
-    folder: "06-next-to-me",
-    title: "Next to me",
-    dateLabel: "Now",
-    subtitle: "The entire time I have been building this.",
-    description: "Where she has been all along: next to me, on the sofa.",
-    kicker: "Now",
-    beats: ["She's been next to me the entire time I've been building this."],
     transition: "crossfade",
   },
 ];
@@ -288,8 +267,8 @@ export function demoStories(): { stories: PetStories; chapters: Record<string, C
       description: c.description,
       dateLabel: c.dateLabel ?? null,
       storyDate: c.storyDate ?? null,
-      tileImageA: null,
-      tileImageB: null,
+      tileImageA: c.tiles?.[0] ?? null,
+      tileImageB: c.tiles?.[1] ?? null,
       tileBlend: { ...DEFAULT_BLEND },
       landingOrder: i + 1,
       scenes: [sceneFor(c)],
