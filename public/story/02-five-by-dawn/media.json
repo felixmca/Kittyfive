@@ -1,0 +1,43 @@
+{
+  "id": "02-five-by-dawn",
+  "frames": 72,
+  "still": true,
+  "extras": [
+    {
+      "name": "end-frame",
+      "src": "/story/02-five-by-dawn/extras/end-frame.webp",
+      "width": 955,
+      "height": 1200
+    },
+    {
+      "name": "kittens1",
+      "src": "/story/02-five-by-dawn/extras/kittens1.webp",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "name": "kittens2",
+      "src": "/story/02-five-by-dawn/extras/kittens2.webp",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "name": "kittens3",
+      "src": "/story/02-five-by-dawn/extras/kittens3.webp",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "name": "kittens4",
+      "src": "/story/02-five-by-dawn/extras/kittens4.webp",
+      "width": 832,
+      "height": 1200
+    },
+    {
+      "name": "kittens5",
+      "src": "/story/02-five-by-dawn/extras/kittens5.webp",
+      "width": 900,
+      "height": 1200
+    }
+  ]
+}

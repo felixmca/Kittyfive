@@ -1,14 +1,19 @@
 /**
- * Kitty's story, as a list of scenes the scroll engine plays in order.
+ * Kitty's landing story: six chapters the scroll engine plays in order, one
+ * Kling clip each (docs/HANDOVER-01-STORY-ASSETS.md).
  *
- * Each scene owns a slot in public/story/<id>/. scripts/build-story.mjs turns
- * whatever the owner drops into assets-raw/story/<id>/ (an .mp4 from artta.ai,
- * or a single .jpg/.png) into a WebP frame sequence + manifest.json there.
- * A scene whose slot is empty renders a placeholder card so the page never
- * breaks while assets are still being generated.
+ * Each scene's id is its folder: scripts/build-story.mjs turns
+ * assets-raw/story/<id>/clip/ (the artta clip) into a WebP frame sequence in
+ * public/story/<id>/, and assets-raw/story/<id>/start-frame/ into
+ * public/story/<id>/still.webp, the fallback poster. A scene with neither
+ * shows a designed placeholder, so the page never breaks while clips are
+ * still being made.
+ *
+ * The same six chapters live in the Stories page too (supabase/seed/kitty.sql),
+ * each in the volume that fits it; their scenes point at the same folders.
  *
  * `beats` are the lines of text that fade in, in order, while the scene is
- * pinned. `enter`/`exit` name the transition the engine uses between scenes.
+ * pinned. `enter`/`exit` name the transition between neighbouring scenes.
  */
 
 export type SceneTransition =
@@ -42,126 +47,81 @@ export interface StoryScene {
 
 export const STORY: StoryScene[] = [
   {
-    id: "01-january-night",
+    id: "01-a-cold-night",
     kicker: "January 2025 · Smith Close, SE16",
     title: "A cold night",
     beats: [
       "One cold January night, a black-and-white cat walked in through our back door.",
       "She did not ask. She just came in.",
-    ],
-    media: { kind: "sequence" },
-    exit: "walk-out-of-frame",
-    pinLength: 2.2,
-  },
-  {
-    id: "02-named-kitty",
-    title: "We called her Kitty",
-    beats: [
       "We called her Kitty because we weren't sure we'd keep her.",
-      "We didn't want to get attached.",
+      "She stayed.",
     ],
-    media: { kind: "sequence" },
-    enter: "walk-out-of-frame",
-    pinLength: 1.8,
-  },
-  {
-    id: "03-she-stayed",
-    title: "She stayed.",
-    beats: ["She stayed."],
-    media: { kind: "sequence" },
+    media: { kind: "sequence", fallbackPoster: "/story/01-a-cold-night/still.webp" },
     exit: "zoom",
-    pinLength: 1.4,
+    pinLength: 2.6,
   },
   {
-    id: "04-the-box",
+    id: "02-five-by-dawn",
     kicker: "14 April 2025 · 12:30am",
-    title: "A cardboard box in a bedroom cupboard",
+    title: "Five by dawn",
     beats: [
       "At half past midnight, in a cardboard box in the bedroom cupboard, the first kitten arrived.",
       "Then another, every thirty minutes.",
       "By dawn there were five.",
+      "She raised them in that cupboard, until every one was adopted and the box was empty again.",
     ],
-    media: { kind: "sequence" },
-    pinLength: 2.6,
-  },
-  {
-    id: "05-five-kittens",
-    title: "Five",
-    beats: [
-      "She raised them in that cupboard.",
-      "One by one they were adopted, until the box was empty and it was just her again.",
-    ],
-    media: { kind: "sequence" },
+    media: { kind: "sequence", fallbackPoster: "/story/02-five-by-dawn/still.webp" },
     exit: "walk-out-of-frame",
-    pinLength: 2.4,
+    pinLength: 2.8,
   },
   {
-    id: "06-pacific-wharf",
+    id: "03-a-flat-on-the-thames",
     kicker: "November 2025 · Pacific Wharf",
     title: "A flat on the Thames",
     beats: [
       "In November we moved to a ground-floor flat on the river.",
       "New windows. New smells. The same cat on the same sofa.",
     ],
-    media: { kind: "sequence" },
+    media: { kind: "sequence", fallbackPoster: "/story/03-a-flat-on-the-thames/still.webp" },
     enter: "walk-out-of-frame",
-    pinLength: 2,
-  },
-  {
-    id: "07-missing",
-    kicker: "23 December 2025",
-    title: "Two days before Christmas",
-    beats: [
-      "We were away for three nights.",
-      "The building manager came in every morning and every evening to feed her.",
-      "She thought we had left her.",
-      "She went missing.",
-    ],
-    media: { kind: "sequence" },
     exit: "fall",
-    pinLength: 2.8,
+    pinLength: 2.2,
+    cutout: "/story/cutouts/kitty-walk.png",
   },
   {
-    id: "08-flyers",
-    kicker: "January to April 2026",
+    id: "04-thousands-of-flyers",
+    kicker: "23 December 2025",
     title: "Thousands of flyers",
     beats: [
-      "Thousands of flyers. Every letterbox we could reach.",
-      "Rainy nights. Wet paper. Four months.",
+      "Two days before Christmas we were away for three nights.",
+      "The building manager fed her every morning and every evening.",
+      "She thought we had left her. She went missing.",
+      "Thousands of flyers. Every letterbox we could reach. Rainy nights. Wet paper. Four months.",
     ],
-    media: { kind: "sequence" },
+    media: { kind: "sequence", fallbackPoster: "/story/04-thousands-of-flyers/still.webp" },
     enter: "fall",
-    pinLength: 2.4,
+    pinLength: 3,
   },
   {
-    id: "09-the-call",
+    id: "05-and-there-she-was",
     kicker: "April 2026",
-    title: "A neighbour saw a flyer",
-    beats: [
-      "A wonderful neighbour saw a flyer, lured her inside with some snacks, and called.",
-      "I cycled over as fast as I could.",
-    ],
-    media: { kind: "sequence" },
-    pinLength: 2.2,
-  },
-  {
-    id: "10-there-she-was",
     title: "And there she was",
     beats: [
-      "Like she had nothing to say. Just a faint recognition.",
-      "That's Kitty sometimes.",
-      "A subtle type of love.",
+      "Four months later, a neighbour saw a flyer, lured her inside with some snacks, and called.",
+      "I cycled over as fast as I could.",
+      "And there she was. Like she had nothing to say. Just a faint recognition.",
+      "That's Kitty sometimes. A subtle type of love.",
     ],
-    media: { kind: "sequence" },
+    media: { kind: "sequence", fallbackPoster: "/story/05-and-there-she-was/still.webp" },
     exit: "slide-up",
-    pinLength: 2.8,
+    pinLength: 3,
   },
   {
-    id: "11-next-to-me",
+    id: "06-next-to-me",
     kicker: "Now",
     title: "Next to me",
     beats: ["She's been next to me the entire time I've been building this."],
-    media: { kind: "sequence" },
+    media: { kind: "sequence", fallbackPoster: "/story/06-next-to-me/still.webp" },
     enter: "slide-up",
     pinLength: 1.8,
   },

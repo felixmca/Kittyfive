@@ -100,3 +100,37 @@ role key on the server; the browser never writes them. RLS on, no client policie
 - ≤ 3 scenes of frames decoded at once (~250 bitmaps × ~1 MB = fine; 11 scenes is not).
 - One R3F canvas per page; `frameloop="demand"` when idle.
 - No texture over 2048², KTX2 for the room scan (see `scan-to-web`).
+
+---
+
+## Platform (added 22 Sep 2026)
+
+Multi-pet from the start: **pets → volumes → chapters → chapter_scenes**
+(+ `chapter_builds`, the owner's private notes). Kitty is the pet in
+`SITE.petSlug`. Schema and policies: `supabase/migrations/`; Kitty's content:
+`supabase/seed/kitty.sql`; RLS smoke test: `supabase/tests/rls-smoke.sql`.
+
+| Route | What it is |
+|---|---|
+| `/stories` | The book: volumes and chapter tiles. Editors: Edit switch → drag tiles (RippleGrid springs), tile editor, volume editor |
+| `/stories/<chapter>` | Continuous reader across chapters and volumes, both directions; URL follows the chapter on screen |
+| `/stories/new?volume=<slug>` | Chapter studio: photos + "what happened" → Claude draft → scenes with Kling prompts |
+| `/stories/<chapter>/edit` | The same studio for an existing chapter: scenes, prompts, 9:16 start frames, clip upload |
+| `/account` | Sign in / create account / forgotten password / set new password |
+| `/admin` | Admin-only dashboard (Kitty Tunables arrive in Phase 3) |
+| `/api/chapters/draft` | Claude Opus 5 drafts a chapter from photos + text (editors only, structured output, fallbacks) |
+| `/api/admin/status` | Which services this deployment has keys for (admins only) |
+
+| Module | Owns |
+|---|---|
+| `src/lib/supabase/{config,browser,server,sessionHint}.ts` | Env, clients (browser session; server anon and "as the caller"), demo switch (`?demo=1`) |
+| `src/lib/auth/{authLanding,store}.ts` | Reset/confirm link capture before supabase-js consumes it; the auth store (live or pretend) |
+| `src/lib/stories/{types,read,client,media,draft}.ts` | Shapes and row mapping; server reads; browser writes (live + demo backends); photo resizing; draft schema |
+| `src/lib/studio/frames.ts` | Browser-side clip → frames and 9:16 start-frame crops |
+| `src/components/stories/*` | RippleGrid, TileFace, TileEditor, VolumeEditor |
+| `src/components/reader/*` | ChapterReader, ReaderScene |
+| `src/components/studio/*` | ChapterStudio, SceneCard |
+
+Rules that hold everywhere: RLS is the boundary (the UI only mirrors it);
+demo mode must always work; `?demo=1` for any test that writes; never commit
+`assets-raw/` media or anything with third parties' personal details.

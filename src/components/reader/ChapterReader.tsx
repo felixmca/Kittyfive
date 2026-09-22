@@ -253,7 +253,56 @@ function ChapterBlock({ entry, chapter, registry }: { entry: ReadingEntry; chapt
           <p className="max-w-[36ch] text-center text-[16px] text-muted">This chapter is still being written.</p>
         </section>
       )}
+      <CameraRoll dir={chapter.scenes.find((s) => s.frames?.dir.startsWith("/"))?.frames?.dir ?? null} />
     </article>
+  );
+}
+
+interface Extra {
+  src: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * The real photos from the same moment, under the AI clip: the chapter's
+ * extras, which npm run story lists in <dir>/media.json (landing chapters).
+ */
+function CameraRoll({ dir }: { dir: string | null }) {
+  const [extras, setExtras] = useState<Extra[]>([]);
+  useEffect(() => {
+    if (!dir) return;
+    const ctrl = new AbortController();
+    fetch(`${dir.replace(/\/$/, "")}/media.json`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { extras?: Extra[] } | null) => {
+        if (j?.extras?.length) setExtras(j.extras);
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [dir]);
+  if (!extras.length) return null;
+  return (
+    <section className="py-12" aria-label="From the camera roll" data-camera-roll>
+      <p className="mx-auto mb-4 max-w-[720px] px-6 text-[11px] font-medium uppercase tracking-[0.2em] text-muted sm:px-8">
+        From the camera roll
+      </p>
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-2 [scrollbar-width:none] sm:px-8">
+        {extras.map((e) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={e.src}
+            src={e.src}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            width={e.width}
+            height={e.height}
+            className="h-[46dvh] max-h-[420px] w-auto shrink-0 snap-center rounded-2xl object-cover ring-1 ring-white/10"
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 

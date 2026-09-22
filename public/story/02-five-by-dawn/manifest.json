@@ -1,0 +1,10 @@
+{
+  "id": "02-five-by-dawn",
+  "source": "clip\\five-by-dawn.mp4",
+  "frames": 72,
+  "width": 576,
+  "height": 1024,
+  "duration": 5.05,
+  "pattern": "%04d.webp",
+  "builtAt": "2026-09-22T22:22:25.191Z"
+}

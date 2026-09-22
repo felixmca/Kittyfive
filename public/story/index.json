@@ -1,1 +1,12 @@
-{}
+{
+  "01-a-cold-night": {
+    "frames": 72,
+    "width": 576,
+    "height": 1024
+  },
+  "02-five-by-dawn": {
+    "frames": 72,
+    "width": 576,
+    "height": 1024
+  }
+}

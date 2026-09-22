@@ -1,12 +1,41 @@
 "use client";
 /**
- * The MISSING flyer as inline SVG: white paper, a strip of yellow tape, bold
- * MISSING, a rounded photo placeholder with a tiny cat, text lines and a
- * phone number drawn as bars. 120 × 160 viewBox (3:4).
+ * The MISSING flyer that falls through the story. When the real flyer has
+ * been added (assets-raw/ui/flyer → /story/flyer.webp by npm run story) it
+ * is that; until then, an inline SVG drawing of one: white paper, a strip of
+ * yellow tape, bold MISSING, a photo placeholder with a tiny cat, text lines
+ * and a phone number drawn as bars. 120 × 160 viewBox (3:4).
  */
+import { useEffect, useState } from "react";
 import styles from "./transitions.module.css";
 
+const REAL_FLYER = "/story/flyer.webp";
+
 export default function MissingFlyer({ className }: { className?: string }) {
+  const [real, setReal] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const img = new Image();
+    img.onload = () => live && setReal(true);
+    img.src = REAL_FLYER;
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (real) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={REAL_FLYER}
+        alt="The MISSING flyer"
+        draggable={false}
+        className={`${styles.flyerSvg} ${className ?? ""}`.trim()}
+        style={{ objectFit: "contain" }}
+      />
+    );
+  }
+
   return (
     <svg
       viewBox="0 0 120 160"

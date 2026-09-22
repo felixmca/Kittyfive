@@ -1,7 +1,8 @@
 # Kittyfive roadmap
 
-*Last updated 22 Sep 2026. This is the plan every session starts from: find the
-first unchecked box in the current phase, do it, tick it, deploy.*
+*Last updated 22 Sep 2026 (late). This is the plan every session starts from:
+find the first unchecked box in the current phase, do it, tick it, deploy.
+Overnight work is briefed in [Handover 02](HANDOVER-02-OVERNIGHT.md).*
 
 ## What we are building
 
@@ -30,8 +31,8 @@ The three pillars, in Kitty's words:
 | Phase | Ships | Needs Felix | Status |
 |---|---|---|---|
 | **0 · Foundation** | Story engine, store, try-on, commerce adapters, verify harness, research | — | ✅ done 21–22 Sep |
-| **1 · The landing story** | Six AI chapters stitched into the landing scroll | Six clips on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 Felix generating; code in progress |
-| **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟡 in progress |
+| **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 clips 1–2 in; swipe engine overnight ([Handover 02](HANDOVER-02-OVERNIGHT.md)) |
+| **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built and deployed; waiting on Felix's sign-up for the live studio test |
 | **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room and garden reference photos | ⬜ next |
 | **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | — | ⬜ |
 | **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | ⬜ |
@@ -49,53 +50,55 @@ Vercel deploys → smoke-test production → tick the boxes here → update memo
 
 ## Phase 1 · The landing story
 
-Six chapters, one Kling 3.0 clip each, played in order by the scroll. Each
-chapter also lives in its volume on the Stories page.
+Four chapters, one clip each, **each starting on the previous clip's final
+frame**. The landing is **swipe-driven**: one swipe plays the flow to the next
+chapter (clip, choreography, caption); tap and hold pauses, drag while holding
+scrubs. Chapter 1 plays under the camera hero as the page loads, behind a
+"Kittyfive" loading splash if it is slow. Full spec: [Handover 02](HANDOVER-02-OVERNIGHT.md).
 
-| # | Chapter | Volume | Transition out |
+| # | Chapter | Volume | Into the next chapter |
 |---|---|---|---|
-| 1 | A cold night | The back door (new) | zoom |
-| 2 | Five by dawn | The cupboard | Kitty walks out of the frame |
-| 3 | A flat on the Thames | The sofa on the river | the flyer falls |
-| 4 | Thousands of flyers | What the flyer said | crossfade |
-| 5 | And there she was | The neighbour | slide up |
-| 6 | Next to me | The neighbour | → turntable, then the two buttons |
+| 1 | A cold night | The back door | the neighbours' WhatsApp chat airdrops in, frames the photo, zooms into it |
+| 2 | Five by dawn (with Kittens1–5) | The cupboard | the MISSING flyer drops in (once `ui/flyer` exists) |
+| 3 | Missing, Found | The neighbour | final frame → first frame |
+| 4 | Riverside sofa | The sofa on the river | → turntable, then the two buttons |
 
 **Felix**
-- [ ] Six clips, start frames and extras into `assets-raw/story/<chapter>/`
-- [ ] `ui/flyer/`, `ui/cutout/`, `ui/portrait/`
-- [ ] Optional: `kitty-identity/`, `turntable/`
+- [x] Chapter 1 clip (Kling, first + final frame) and chapter 2 clip (Seedance 2.5), start/end frames, Kittens1–5
+- [ ] Chapter 3 "Missing, Found" and chapter 4 "Riverside sofa" (briefs in Handover 01; ~138 credits left)
+- [ ] `ui/flyer/`, `ui/portrait/`
 
 **Code**
-- [x] Handover 01 rewritten for six chapters; folder tree created; raw media git-ignored
-- [ ] Story config → six chapters (kickers, beats, transitions above)
-- [ ] Pipeline reads the new layout: newest file in `clip/`, `start-frame/` as the
-      still fallback (slow push-in), `extras/` → web-size WebP, HEIC converted
-- [ ] `ui/flyer` → the falling flyer; `ui/cutout` → the walking Kitty;
-      `ui/portrait` → `og.png` share image and the story's last frame
-- [ ] A strip of the real photos (extras) at the end of each chapter
-- [ ] When clips land: tune each chapter's scroll length and beat timing to the footage
-- [ ] Verify at 390×844 and 1280×800, deploy
+- [x] Handover 01 rewritten; folder tree; raw media git-ignored
+- [x] Pipeline: newest clip → frames (never upscaled), start frame → still, extras keep their names, HEIC converted, flyer/cut-out/portrait/whatsapp published
+- [x] Neighbours' WhatsApp screenshot blurred (names, numbers, avatars, house number); the original is never published
+- [ ] Commit chapter 1–2 media (Handover 02, task A)
+- [ ] Four chapters in config, database, seed and demo copy (task B)
+- [ ] Swipe story engine: stops, swipe/keys/wheel, hold to pause, drag to scrub, reduced motion, skip (task C)
+- [ ] Chapter 1 → 2 WhatsApp flight; chapter 2 kittens; captions that assemble; loading splash (tasks D–G)
+- [ ] Verify at 390×844 and 1280×800 (headless Playwright + `npm run verify`), deploy (tasks H–I)
+- [ ] When clips 3–4 land: flyer drop, chapters 3–4, tune timings
 
-**Done when** scrolling the production site on an iPhone plays all six chapters
-in order without stutter, and every chapter opens from its volume.
+**Done when** a phone loading the site sees chapter 1 play under the camera,
+and four swipes carry it through the whole story with no seams.
 
 ---
 
 ## Phase 2 · The Stories page
 
 ### 2A · Platform foundation *(this session)*
-- [ ] Git repo pushed to `github.com/felixmca/Kittyfive` (public). Secrets
+- [x] Git repo pushed to `github.com/felixmca/Kittyfive` (public). Secrets
       scanned; `.env.local` and raw media ignored
-- [ ] Supabase schema as migrations in `supabase/migrations/` (applied through
+- [x] Supabase schema as migrations in `supabase/migrations/` (applied through
       the Supabase MCP and mirrored as files): `profiles`, `admins` +
       `is_admin()`, `pets`, `volumes`, `chapters`, `chapter_scenes`, storage
-      bucket `story-media`, commerce tables. RLS on everything
-- [ ] Auth like Birthday Lobby: email + password, confirm email, forgotten
+      bucket `story-media`. RLS on everything; smoke test in `supabase/tests/`.
+      (Commerce tables wait for Phase 6: `supabase/commerce.sql`)
+- [x] Auth like Birthday Lobby: email + password, confirm email, forgotten
       password, set new password, sign out. `/account`
-- [ ] Admin: Felix's address in `admins` (seeded in the database, not the public
+- [x] Admin: Felix's address in `admins` (seeded in the database, not the public
       repo); `/admin` shell
-- [ ] Vercel: env vars, function region next to the database (Frankfurt), first
+- [x] Vercel: env vars, function region next to the database (Frankfurt), first
       production deploy
 - [ ] **Felix:** Supabase → Authentication → URL Configuration: Site URL
       `https://kittyfive.vercel.app`; Redirect URLs `https://kittyfive.vercel.app/**`,
@@ -104,35 +107,37 @@ in order without stutter, and every chapter opens from its volume.
       confirmation email (that makes you admin, and admins edit Kitty)
 
 ### 2B · Volumes and chapter tiles
-- [ ] Kitty seeded: seven volumes (the six vignettes + "The back door"), the six
-      landing chapters inside them
-- [ ] `/stories` renders volumes and chapter tiles from Supabase (config
+- [x] Kitty seeded: seven volumes (the six vignettes + "The back door"), the
+      landing chapters inside them (cut from six to four overnight)
+- [x] `/stories` renders volumes and chapter tiles from Supabase (config
       fallback in demo mode)
-- [ ] Chapter tile face: date, title, subtitle, description, up to two
+- [x] Chapter tile face: date, title, subtitle, description, up to two
       background images blended with a gradient
-- [ ] Owner mode: add, edit and delete volumes; tile editor with live preview;
+- [x] Owner mode: add, edit and delete volumes; tile editor with live preview;
       image upload
-- [ ] Drag chapter tiles to reorder, with spring physics: neighbours are pushed
+- [x] Drag chapter tiles to reorder, with spring physics: neighbours are pushed
       away and pulled back, and the motion ripples down the row. Touch, mouse
       and keyboard; order saved
 
 ### 2C · The chapter reader
-- [ ] Every chapter has its own URL and share preview
-- [ ] Scenes: photo with a slow push-in, or clip frames scrubbed by the scroll,
+- [x] Every chapter has its own URL and share preview
+- [x] Scenes: photo with a slow push-in, or clip frames scrubbed by the scroll,
       with beats fading in
-- [ ] Continuous reading: scroll past the end of a chapter into the next; past
+- [x] Continuous reading: scroll past the end of a chapter into the next; past
       the end of a volume into the next volume; scroll up from the first
       chapter of volume 2 into the last chapter of volume 1. The address bar
       follows the chapter on screen
 
 ### 2D · The chapter builder (pillar 1)
-- [ ] Upload a few photos and describe what happened
-- [ ] Claude (Opus 5, vision) drafts the chapter: title, subtitle, 3–6 scenes
+- [x] Upload a few photos and describe what happened (`/stories/new`)
+- [x] Claude (Opus 5, vision) drafts the chapter: title, subtitle, 2–6 scenes
       (photo + beats) and an artta/Kling prompt per scene
-- [ ] The chapter works straight away as a photo story (draft until published)
-- [ ] Per scene: copy the prompt, download the 9:16 start frame, drop the clip
+- [x] The chapter works straight away as a photo story (draft until published)
+- [x] Per scene: copy the prompt, download the 9:16 start frame, drop the clip
       artta returns → frames are cut in the browser → the scene animates.
       (artta.ai has no public API, verified 22 Sep 2026; see decisions)
+- [ ] First real run on the live site once Felix has signed up (the draft route
+      and clip upload have only been exercised in demo mode)
 
 ### 2E · Verify and ship
 - [ ] Playwright journeys: visitor reads across a volume boundary; owner edits

@@ -21,3 +21,5 @@ assets-raw/**
 .vercel
 .env*
 !.env.example
+# pipeline build stamps (per machine)
+public/**/.built

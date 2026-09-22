@@ -152,9 +152,12 @@ export function slugify(input: string, fallback = "chapter"): string {
   return s || fallback;
 }
 
-/** slugify, then add -2, -3… until it is not in `taken`. */
+/** Slugs that would collide with routes under /stories. */
+const RESERVED_SLUGS = ["new", "edit"];
+
+/** slugify, then add -2, -3… until it is not in `taken` (or reserved). */
 export function uniqueSlug(input: string, taken: Iterable<string>, fallback?: string): string {
-  const used = new Set(taken);
+  const used = new Set([...taken, ...RESERVED_SLUGS]);
   const base = slugify(input, fallback);
   if (!used.has(base)) return base;
   for (let i = 2; i < 1000; i++) {

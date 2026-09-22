@@ -1,0 +1,10 @@
+{
+  "id": "01-a-cold-night",
+  "source": "clip\\a-cold-night-come-inside.mp4",
+  "frames": 72,
+  "width": 576,
+  "height": 1024,
+  "duration": 5.04,
+  "pattern": "%04d.webp",
+  "builtAt": "2026-09-22T22:22:09.019Z"
+}

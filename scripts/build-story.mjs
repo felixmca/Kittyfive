@@ -1,27 +1,38 @@
 // ─── STORY ASSET PIPELINE ────────────────────────────────────────────────────
 //
-//   assets-raw/story/<scene-id>/clip.mp4     (from artta.ai, any length/size)
-//   assets-raw/story/<scene-id>/still.jpg    (or a single image)
-//   assets-raw/turntable/*.jpg               (N photos of Kitty, in spin order)
+//   assets-raw/story/<chapter>/clip/*.mp4          the artta clip (newest wins)
+//   assets-raw/story/<chapter>/start-frame/*.jpg   the photo the clip starts from
+//   assets-raw/story/<chapter>/extras/*.jpg        real photos from the same time
+//   assets-raw/ui/flyer/*.png|jpg                  the MISSING flyer
+//   assets-raw/ui/cutout/*.png                     transparent Kitty, side-on
+//                          *.mp4                   (or a green-screen walk clip)
+//   assets-raw/ui/portrait/*.jpg                   the favourite photo
+//   assets-raw/turntable/orbit.mp4 or *.jpg        the 360° spin
 //
 //        ⇩  npm run story   (also runs on predev / prebuild)
 //
-//   public/story/<scene-id>/0001.webp … 00NN.webp + manifest.json
+//   public/story/<chapter>/0001.webp … + manifest.json   frames, if there is a clip
+//   public/story/<chapter>/still.webp                    the start frame (poster)
+//   public/story/<chapter>/extras/01.webp … + media.json the extras
+//   public/story/index.json                              which chapters have frames
+//   public/story/flyer.webp, public/story/cutouts/kitty-walk.png (or walk/…)
+//   public/og.png (1200×630 share image), public/story/portrait.webp
+//   public/story/whatsapp-chat.webp + .json (from assets-raw/ui/whatsapp, pre-blurred)
 //   public/turntable/0001.webp … + manifest.json
 //
-// WHY FRAMES, NOT <video>: iOS Safari will not scrub a <video> element with
-// currentTime smoothly on scroll (it decodes on a separate thread, seeks land
-// late and jitter, and it refuses to play without a user gesture). A folder of
-// WebP frames drawn onto a <canvas> is how every "Apple product page" scroll
-// story actually works, and it is deterministic on every phone.
+// The old flat layout (clip.mp4 / still.jpg directly in the chapter folder)
+// still works. iPhone HEIC photos are converted on the way through.
 //
-// BUDGET: 720 px wide, 9:16, ~72 frames per scene, WebP q=72 lands around
-// 2–3 MB per scene decoded lazily. 11 scenes ≈ 25–35 MB over the session,
-// fetched progressively as the reader scrolls, never all at once.
+// WHY FRAMES, NOT <video>: iOS Safari will not scrub a <video> smoothly on
+// scroll (seeks land late and jitter, and it needs a user gesture). A folder
+// of WebP frames drawn on a <canvas> is how Apple's own product pages do it.
 //
-// Idempotent: a scene whose newest raw file is older than its manifest is
-// skipped. Absent-source-safe: with no assets-raw at all (e.g. on Vercel) it
-// exits 0 and leaves whatever is already committed in public/story.
+// BUDGET: 720 px wide, 9:16, 72 frames per chapter, WebP q=72: about 2–3 MB
+// per chapter, fetched progressively as the reader scrolls.
+//
+// Idempotent: a chapter whose newest raw file is older than its build stamp is
+// skipped. With no assets-raw at all (e.g. on Vercel) it exits 0 and leaves
+// whatever is committed in public/.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -33,7 +44,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,17 +55,18 @@ const FRAMES_PER_SCENE = Number(process.env.STORY_FRAMES ?? 72);
 const WIDTH = Number(process.env.STORY_WIDTH ?? 720);
 const QUALITY = Number(process.env.STORY_QUALITY ?? 72);
 const VIDEO_EXT = new Set([".mp4", ".mov", ".webm", ".m4v"]);
-const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".tif", ".tiff"]);
+const HEIC_EXT = new Set([".heic", ".heif"]);
+const STAMP = ".built";
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function ffmpeg() {
   try {
     execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
     return "ffmpeg";
   } catch {
-    const pw = join(
-      process.env.LOCALAPPDATA ?? "",
-      "ms-playwright",
-    );
+    const pw = join(process.env.LOCALAPPDATA ?? "", "ms-playwright");
     if (existsSync(pw)) {
       const dir = readdirSync(pw).find((d) => d.startsWith("ffmpeg-"));
       if (dir) return join(pw, dir, "ffmpeg-win64.exe");
@@ -63,22 +75,26 @@ function ffmpeg() {
   }
 }
 
-function newest(dir) {
-  let t = 0;
-  for (const f of readdirSync(dir)) {
-    const s = statSync(join(dir, f));
-    if (s.isFile()) t = Math.max(t, s.mtimeMs);
-  }
-  return t;
+/** Files (not folders) in `dir` with one of `exts`, oldest first. Missing dir → []. */
+function filesIn(dir, exts) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => !f.startsWith(".") && exts.has(extname(f).toLowerCase()))
+    .map((f) => join(dir, f))
+    .filter((p) => statSync(p).isFile())
+    .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs);
 }
+
+const newest = (dir, exts) => filesIn(dir, exts).at(-1) ?? null;
+const mtime = (p) => (p && existsSync(p) ? statSync(p).mtimeMs : 0);
 
 function upToDate(outDir, sourceMtime) {
-  const m = join(outDir, "manifest.json");
-  return existsSync(m) && statSync(m).mtimeMs >= sourceMtime;
+  const stamp = join(outDir, STAMP);
+  return existsSync(stamp) && statSync(stamp).mtimeMs >= sourceMtime;
 }
 
-function pad(n) {
-  return String(n).padStart(4, "0");
+function stamp(outDir) {
+  writeFileSync(join(outDir, STAMP), new Date().toISOString());
 }
 
 async function sharp() {
@@ -86,8 +102,18 @@ async function sharp() {
   return mod.default;
 }
 
+/**
+ * Something sharp can read: the path itself, or for HEIC (which sharp's
+ * prebuilt binaries cannot decode) a JPEG buffer converted in pure JS.
+ */
+async function readable(file) {
+  if (!HEIC_EXT.has(extname(file).toLowerCase())) return file;
+  const { default: convert } = await import("heic-convert");
+  return Buffer.from(await convert({ buffer: readFileSync(file), format: "JPEG", quality: 0.92 }));
+}
+
 function probeDuration(bin, file) {
-  // ffmpeg prints duration to stderr; ffprobe may not be beside a Playwright ffmpeg.
+  // ffmpeg prints the duration to stderr; ffprobe may not sit beside a Playwright ffmpeg.
   try {
     execFileSync(bin, ["-i", file], { stdio: ["ignore", "ignore", "pipe"] });
   } catch (e) {
@@ -97,80 +123,187 @@ function probeDuration(bin, file) {
   return null;
 }
 
-async function buildSequenceFromVideo(bin, file, outDir) {
+function clearFrames(outDir) {
+  if (!existsSync(outDir)) return;
+  for (const f of readdirSync(outDir)) {
+    if (/^\d{4}\.webp$/.test(f) || f === "manifest.json") rmSync(join(outDir, f), { force: true });
+  }
+}
+
+// ─── chapters ────────────────────────────────────────────────────────────────
+
+async function framesFromVideo(bin, file, outDir) {
   const duration = probeDuration(bin, file);
-  if (!duration) throw new Error(`could not read duration of ${file}`);
+  if (!duration) throw new Error(`could not read the duration of ${file}`);
   const fps = FRAMES_PER_SCENE / duration;
-  rmSync(outDir, { recursive: true, force: true });
-  mkdirSync(outDir, { recursive: true });
-  // scale to WIDTH, keep aspect, even height; write WebP directly.
+  clearFrames(outDir);
   execFileSync(
     bin,
     [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-i",
-      file,
-      "-vf",
-      `fps=${fps.toFixed(4)},scale=${WIDTH}:-2:flags=lanczos`,
-      "-frames:v",
-      String(FRAMES_PER_SCENE),
-      "-c:v",
-      "libwebp",
-      "-quality",
-      String(QUALITY),
-      "-compression_level",
-      "6",
+      "-hide_banner", "-loglevel", "error",
+      "-i", file,
+      "-vf", `fps=${fps.toFixed(4)},scale='min(${WIDTH},iw)':-2:flags=lanczos`,
+      "-frames:v", String(FRAMES_PER_SCENE),
+      "-c:v", "libwebp", "-quality", String(QUALITY), "-compression_level", "6",
       join(outDir, "%04d.webp"),
     ],
     { stdio: "inherit" },
   );
-  const frames = readdirSync(outDir).filter((f) => f.endsWith(".webp")).sort();
+  const frames = readdirSync(outDir).filter((f) => /^\d{4}\.webp$/.test(f)).sort();
+  if (!frames.length) throw new Error(`ffmpeg wrote no frames for ${file}`);
   const S = await sharp();
   const meta = await S(join(outDir, frames[0])).metadata();
   return { frames: frames.length, width: meta.width, height: meta.height, duration };
 }
 
-async function buildSequenceFromImage(file, outDir) {
-  rmSync(outDir, { recursive: true, force: true });
+async function buildChapter(bin, id) {
+  const inDir = join(RAW, "story", id);
+  const outDir = join(PUB, "story", id);
+  const clip = newest(join(inDir, "clip"), VIDEO_EXT) ?? newest(inDir, VIDEO_EXT);
+  const start = newest(join(inDir, "start-frame"), IMAGE_EXT) ?? newest(inDir, IMAGE_EXT);
+  // Extras keep their names (Kittens1, end-frame…) so the story can place
+  // specific ones; natural sort, so Kittens2 comes before Kittens10.
+  const extras = filesIn(join(inDir, "extras"), IMAGE_EXT).sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+  );
+  if (!clip && !start && !extras.length) return null;
+
+  const sourceMtime = Math.max(mtime(clip), mtime(start), ...extras.map(mtime), statSync(inDir).mtimeMs);
+  if (upToDate(outDir, sourceMtime)) {
+    console.log(`[story] ${id}: up to date`);
+    const m = join(outDir, "manifest.json");
+    return existsSync(m) ? JSON.parse(readFileSync(m, "utf8")) : { frames: 0 };
+  }
   mkdirSync(outDir, { recursive: true });
   const S = await sharp();
-  const out = join(outDir, "0001.webp");
-  await S(file).resize({ width: WIDTH }).webp({ quality: QUALITY }).toFile(out);
-  const meta = await S(out).metadata();
-  return { frames: 1, width: meta.width, height: meta.height, duration: 0 };
+
+  let manifest = { frames: 0 };
+  if (clip) {
+    if (!bin) throw new Error("ffmpeg not found; install it with `winget install Gyan.FFmpeg`");
+    const info = await framesFromVideo(bin, clip, outDir);
+    manifest = { id, source: clip.slice(inDir.length + 1), ...info, pattern: "%04d.webp", builtAt: new Date().toISOString() };
+    writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  } else {
+    clearFrames(outDir);
+  }
+
+  if (start) {
+    await S(await readable(start)).rotate().resize({ width: WIDTH, withoutEnlargement: true }).webp({ quality: 80 }).toFile(join(outDir, "still.webp"));
+  } else {
+    rmSync(join(outDir, "still.webp"), { force: true });
+  }
+
+  const extrasOut = join(outDir, "extras");
+  rmSync(extrasOut, { recursive: true, force: true });
+  const extrasList = [];
+  if (extras.length) {
+    mkdirSync(extrasOut, { recursive: true });
+    const used = new Set();
+    for (const file of extras) {
+      let slug = basename(file).replace(/.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "photo";
+      while (used.has(slug)) slug += "-2";
+      used.add(slug);
+      const name = `${slug}.webp`;
+      const info = await S(await readable(file))
+        .rotate()
+        .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toFile(join(extrasOut, name));
+      extrasList.push({ name: slug, src: `/story/${id}/extras/${name}`, width: info.width, height: info.height });
+    }
+  }
+
+  writeFileSync(
+    join(outDir, "media.json"),
+    JSON.stringify({ id, frames: manifest.frames, still: Boolean(start), extras: extrasList }, null, 2),
+  );
+  stamp(outDir);
+  console.log(
+    `[story] ${id}: ${manifest.frames ? `${manifest.frames} frames @ ${manifest.width}×${manifest.height}` : "no clip yet"}` +
+      `${start ? " · still" : ""}${extrasList.length ? ` · ${extrasList.length} extras` : ""}`,
+  );
+  return manifest;
 }
 
-async function buildScene(bin, sceneId) {
-  const inDir = join(RAW, "story", sceneId);
-  const outDir = join(PUB, "story", sceneId);
-  const files = readdirSync(inDir).filter((f) => !f.startsWith("."));
-  const video = files.find((f) => VIDEO_EXT.has(extname(f).toLowerCase()));
-  const image = files.find((f) => IMAGE_EXT.has(extname(f).toLowerCase()));
-  if (!video && !image) return null;
-  const src = newest(inDir);
-  if (upToDate(outDir, src)) {
-    console.log(`[story] ${sceneId}: up to date`);
-    return JSON.parse(readFileSync(join(outDir, "manifest.json"), "utf8"));
+// ─── the rest of the story's pictures ────────────────────────────────────────
+
+async function buildUi(bin) {
+  const S = await sharp();
+  const ui = join(RAW, "ui");
+
+  const flyer = newest(join(ui, "flyer"), IMAGE_EXT);
+  const flyerOut = join(PUB, "story", "flyer.webp");
+  if (flyer && mtime(flyer) > mtime(flyerOut)) {
+    await S(await readable(flyer)).rotate().resize({ height: 1400, withoutEnlargement: true }).webp({ quality: 86 }).toFile(flyerOut);
+    console.log("[ui] flyer.webp");
   }
-  let info;
-  if (video) {
-    if (!bin) throw new Error("ffmpeg not found; install with `winget install Gyan.FFmpeg`");
-    info = await buildSequenceFromVideo(bin, join(inDir, video), outDir);
-  } else {
-    info = await buildSequenceFromImage(join(inDir, image), outDir);
+  if (existsSync(join(ui, "flyer")) && readdirSync(join(ui, "flyer")).some((f) => f.toLowerCase().endsWith(".pdf")) && !flyer) {
+    console.log("[ui] flyer: found a PDF; export it as PNG or JPEG (the pipeline reads images).");
   }
-  const manifest = {
-    id: sceneId,
-    source: video ?? image,
-    ...info,
-    pattern: "%04d.webp",
-    builtAt: new Date().toISOString(),
-  };
-  writeFileSync(join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2));
-  console.log(`[story] ${sceneId}: ${info.frames} frames @ ${info.width}×${info.height}`);
-  return manifest;
+
+  const cutoutDir = join(ui, "cutout");
+  const cutoutPng = newest(cutoutDir, new Set([".png", ".webp"]));
+  const cutoutOut = join(PUB, "story", "cutouts", "kitty-walk.png");
+  if (cutoutPng && mtime(cutoutPng) > mtime(cutoutOut)) {
+    mkdirSync(dirname(cutoutOut), { recursive: true });
+    await S(cutoutPng).resize({ height: 900, withoutEnlargement: true }).png().toFile(cutoutOut);
+    console.log("[ui] cutouts/kitty-walk.png");
+  }
+  const cutoutClip = newest(cutoutDir, VIDEO_EXT);
+  if (cutoutClip) await alphaWalk(bin, cutoutClip, join(PUB, "story", "cutouts", "walk"));
+
+  // ui/whatsapp/*.jpg: the neighbours' chat, ALREADY BLURRED (names, numbers,
+  // avatars, house number). The unblurred original lives in ui/whatsapp/original/
+  // and is never read here. The sidecar JSON says where the photo sits in it.
+  const chat = newest(join(ui, "whatsapp"), IMAGE_EXT);
+  const chatOut = join(PUB, "story", "whatsapp-chat.webp");
+  if (chat && mtime(chat) > mtime(chatOut)) {
+    await S(await readable(chat)).rotate().webp({ quality: 84 }).toFile(chatOut);
+    const sidecar = join(ui, "whatsapp", "whatsapp-chat.json");
+    if (existsSync(sidecar)) writeFileSync(join(PUB, "story", "whatsapp-chat.json"), readFileSync(sidecar, "utf8"));
+    console.log("[ui] whatsapp-chat.webp");
+  }
+
+  const portrait = newest(join(ui, "portrait"), IMAGE_EXT);
+  const ogOut = join(PUB, "og.png");
+  if (portrait && mtime(portrait) > mtime(ogOut)) {
+    const input = await readable(portrait);
+    await S(input).rotate().resize(1200, 630, { fit: "cover", position: "attention" }).png().toFile(ogOut);
+    await S(input).rotate().resize({ width: 1080, height: 1080, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toFile(join(PUB, "story", "portrait.webp"));
+    console.log("[ui] og.png + portrait.webp");
+  }
+}
+
+/** A clip of Kitty walking on flat chroma green → frames with real alpha. */
+async function alphaWalk(bin, src, outDir) {
+  if (upToDate(outDir, mtime(src))) return;
+  if (!bin) throw new Error("ffmpeg not found; install it with `winget install Gyan.FFmpeg`");
+  const duration = probeDuration(bin, src);
+  if (!duration) throw new Error(`could not read the duration of ${src}`);
+  const frames = 48;
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+  execFileSync(
+    bin,
+    [
+      "-hide_banner", "-loglevel", "error",
+      "-i", src,
+      "-vf", `fps=${(frames / duration).toFixed(4)},scale=${WIDTH}:-2:flags=lanczos,chromakey=0x00FF00:0.10:0.08,despill=type=green`,
+      "-frames:v", String(frames),
+      "-c:v", "libwebp", "-quality", "85", "-compression_level", "6", "-pix_fmt", "yuva420p",
+      join(outDir, "%04d.webp"),
+    ],
+    { stdio: "inherit" },
+  );
+  const n = readdirSync(outDir).filter((x) => x.endsWith(".webp")).length;
+  const S = await sharp();
+  const meta = await S(join(outDir, "0001.webp")).metadata();
+  writeFileSync(
+    join(outDir, "manifest.json"),
+    JSON.stringify({ frames: n, width: meta.width, height: meta.height, pattern: "%04d.webp", alpha: true, builtAt: new Date().toISOString() }, null, 2),
+  );
+  stamp(outDir);
+  console.log(`[ui] cutouts/walk: ${n} alpha frames`);
 }
 
 const TURNTABLE_FRAMES = Number(process.env.TURNTABLE_FRAMES ?? 36);
@@ -178,145 +311,68 @@ const TURNTABLE_FRAMES = Number(process.env.TURNTABLE_FRAMES ?? 36);
 async function buildTurntable(bin) {
   const inDir = join(RAW, "turntable");
   const outDir = join(PUB, "turntable");
-  if (!existsSync(inDir)) return;
-  const all = readdirSync(inDir).filter((f) => !f.startsWith("."));
-  const video = all.find((f) => VIDEO_EXT.has(extname(f).toLowerCase()));
-  const files = all.filter((f) => IMAGE_EXT.has(extname(f).toLowerCase())).sort();
-  if (!video && !files.length) return;
-  if (upToDate(outDir, newest(inDir))) {
-    console.log(`[turntable] up to date`);
+  const video = newest(inDir, VIDEO_EXT);
+  const stills = filesIn(inDir, IMAGE_EXT).sort();
+  if (!video && !stills.length) return;
+  if (upToDate(outDir, Math.max(mtime(video), ...stills.map(mtime)))) {
+    console.log("[turntable] up to date");
     return;
   }
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   const S = await sharp();
-  let i = 0;
-  let size = null;
-
+  let n = 0;
   if (video) {
     // One slow walk around a sitting cat is far easier to shoot than 36 stills.
-    // Extract TURNTABLE_FRAMES evenly spaced frames, centre-crop to square.
-    if (!bin) throw new Error("ffmpeg not found; install with `winget install Gyan.FFmpeg`");
-    const duration = probeDuration(bin, join(inDir, video));
-    if (!duration) throw new Error(`could not read duration of ${video}`);
-    const fps = TURNTABLE_FRAMES / duration;
+    if (!bin) throw new Error("ffmpeg not found; install it with `winget install Gyan.FFmpeg`");
+    const duration = probeDuration(bin, video);
+    if (!duration) throw new Error(`could not read the duration of ${video}`);
     execFileSync(
       bin,
       [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        join(inDir, video),
-        "-vf",
-        `fps=${fps.toFixed(4)},scale=900:900:force_original_aspect_ratio=increase,crop=900:900`,
-        "-frames:v",
-        String(TURNTABLE_FRAMES),
-        "-c:v",
-        "libwebp",
-        "-quality",
-        "80",
+        "-hide_banner", "-loglevel", "error",
+        "-i", video,
+        "-vf", `fps=${(TURNTABLE_FRAMES / duration).toFixed(4)},scale=900:900:force_original_aspect_ratio=increase,crop=900:900`,
+        "-frames:v", String(TURNTABLE_FRAMES),
+        "-c:v", "libwebp", "-quality", "80",
         join(outDir, "%04d.webp"),
       ],
       { stdio: "inherit" },
     );
-    i = readdirSync(outDir).filter((f) => f.endsWith(".webp")).length;
-    size = await S(join(outDir, "0001.webp")).metadata();
+    n = readdirSync(outDir).filter((f) => f.endsWith(".webp")).length;
   } else {
-    for (const f of files) {
-      i++;
-      const out = join(outDir, `${pad(i)}.webp`);
-      await S(join(inDir, f))
-        .rotate() // honour EXIF orientation from the phone
-        .resize({ width: 900, height: 900, fit: "cover" })
-        .webp({ quality: 80 })
-        .toFile(out);
-      size ??= await S(out).metadata();
+    for (const f of stills) {
+      n++;
+      await S(await readable(f)).rotate().resize({ width: 900, height: 900, fit: "cover" }).webp({ quality: 80 }).toFile(join(outDir, `${String(n).padStart(4, "0")}.webp`));
     }
   }
+  const meta = await S(join(outDir, "0001.webp")).metadata();
   writeFileSync(
     join(outDir, "manifest.json"),
-    JSON.stringify(
-      {
-        frames: i,
-        width: size.width,
-        height: size.height,
-        pattern: "%04d.webp",
-        source: video ?? `${files.length} stills`,
-        builtAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
+    JSON.stringify({ frames: n, width: meta.width, height: meta.height, pattern: "%04d.webp", builtAt: new Date().toISOString() }, null, 2),
   );
-  console.log(`[turntable] ${i} frames from ${video ?? "stills"}`);
+  stamp(outDir);
+  console.log(`[turntable] ${n} frames`);
 }
 
-/**
- * Cut-outs: assets-raw/cutouts/<name>.mp4 shot/generated against flat chroma
- * green becomes public/story/cutouts/<name>/0001.webp… with real alpha
- * (yuva420p WebP), so Kitty can walk between the photo frames. A plain PNG in
- * the same folder is copied through as public/story/cutouts/<name>.png.
- */
-async function buildCutouts(bin) {
+/** The old drop zone for cut-outs (assets-raw/cutouts), kept working. */
+async function buildLegacyCutouts(bin) {
   const inDir = join(RAW, "cutouts");
-  const outRoot = join(PUB, "story", "cutouts");
   if (!existsSync(inDir)) return;
-  mkdirSync(outRoot, { recursive: true });
   const S = await sharp();
-  for (const f of readdirSync(inDir).filter((f) => !f.startsWith("."))) {
+  const outRoot = join(PUB, "story", "cutouts");
+  mkdirSync(outRoot, { recursive: true });
+  for (const f of readdirSync(inDir).filter((x) => !x.startsWith("."))) {
     const ext = extname(f).toLowerCase();
     const name = f.slice(0, -ext.length);
     const src = join(inDir, f);
     if (IMAGE_EXT.has(ext)) {
       const out = join(outRoot, `${name}.png`);
-      if (existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs) continue;
-      await S(src).png().toFile(out);
+      if (mtime(out) >= mtime(src)) continue;
+      await S(await readable(src)).png().toFile(out);
       console.log(`[cutouts] ${name}.png`);
     } else if (VIDEO_EXT.has(ext)) {
-      const outDir = join(outRoot, name);
-      if (upToDate(outDir, statSync(src).mtimeMs)) continue;
-      if (!bin) throw new Error("ffmpeg not found; install with `winget install Gyan.FFmpeg`");
-      const duration = probeDuration(bin, src);
-      if (!duration) throw new Error(`could not read duration of ${f}`);
-      const frames = 48;
-      rmSync(outDir, { recursive: true, force: true });
-      mkdirSync(outDir, { recursive: true });
-      execFileSync(
-        bin,
-        [
-          "-hide_banner",
-          "-loglevel",
-          "error",
-          "-i",
-          src,
-          "-vf",
-          `fps=${(frames / duration).toFixed(4)},scale=${WIDTH}:-2:flags=lanczos,chromakey=0x00FF00:0.10:0.08,despill=type=green`,
-          "-frames:v",
-          String(frames),
-          "-c:v",
-          "libwebp",
-          "-quality",
-          "85",
-          "-compression_level",
-          "6",
-          "-pix_fmt",
-          "yuva420p",
-          join(outDir, "%04d.webp"),
-        ],
-        { stdio: "inherit" },
-      );
-      const n = readdirSync(outDir).filter((x) => x.endsWith(".webp")).length;
-      const meta = await S(join(outDir, "0001.webp")).metadata();
-      writeFileSync(
-        join(outDir, "manifest.json"),
-        JSON.stringify(
-          { frames: n, width: meta.width, height: meta.height, pattern: "%04d.webp", alpha: true, source: f, builtAt: new Date().toISOString() },
-          null,
-          2,
-        ),
-      );
-      console.log(`[cutouts] ${name}: ${n} alpha frames`);
+      await alphaWalk(bin, src, join(outRoot, name));
     }
   }
 }
@@ -327,29 +383,36 @@ async function main() {
   if (!existsSync(storyRaw)) {
     console.log("[story] no assets-raw/story; keeping committed public/story as is");
   } else {
-    const scenes = readdirSync(storyRaw).filter((d) =>
-      statSync(join(storyRaw, d)).isDirectory(),
-    );
+    const chapters = readdirSync(storyRaw).filter((d) => statSync(join(storyRaw, d)).isDirectory());
     const index = {};
-    for (const id of scenes) {
+    for (const id of chapters) {
       try {
-        const m = await buildScene(bin, id);
-        if (m) index[id] = { frames: m.frames, width: m.width, height: m.height };
+        const m = await buildChapter(bin, id);
+        if (m?.frames) index[id] = { frames: m.frames, width: m.width, height: m.height };
       } catch (e) {
         console.error(`[story] ${id}: ${e.message}`);
         process.exitCode = 1;
       }
     }
     mkdirSync(join(PUB, "story"), { recursive: true });
-    // Merge with anything already committed so a partial local run never
-    // erases scenes built on another machine.
+    // Merge with what is already committed (a partial local run must never
+    // erase chapters built on another machine: their folders exist here too,
+    // because the READMEs are committed), and drop chapters that are no longer
+    // in the story at all.
     const indexPath = join(PUB, "story", "index.json");
     const prev = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, "utf8")) : {};
-    writeFileSync(indexPath, JSON.stringify({ ...prev, ...index }, null, 2));
-    console.log(`[story] index: ${Object.keys({ ...prev, ...index }).length} scene(s) with media`);
+    const merged = Object.fromEntries(Object.entries({ ...prev, ...index }).filter(([id]) => chapters.includes(id)));
+    writeFileSync(indexPath, JSON.stringify(merged, null, 2));
+    console.log(`[story] index: ${Object.keys(merged).length} chapter(s) with frames`);
+  }
+  try {
+    await buildUi(bin);
+  } catch (e) {
+    console.error(`[ui] ${e.message}`);
+    process.exitCode = 1;
   }
   await buildTurntable(bin);
-  await buildCutouts(bin);
+  await buildLegacyCutouts(bin);
 }
 
 main().catch((e) => {

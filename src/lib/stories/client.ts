@@ -80,7 +80,18 @@ export interface StoriesBackend {
   reorderChapters(volumeId: string, ids: string[]): Promise<void>;
   saveScenes(chapterId: string, scenes: SceneInput[]): Promise<Scene[]>;
   /** Upload a photo; returns the stored reference (bucket path, or a data URL in demo). */
-  uploadImage(petId: string, file: Blob, folder: string): Promise<string>;
+  uploadImage(petId: string, file: Blob, folder: string, maxEdge?: number): Promise<string>;
+  /** Upload bytes as they are (clip frames, manifests) to pets/<petId>/<path>. Live only. */
+  uploadBlob(petId: string, path: string, blob: Blob, contentType: string): Promise<string>;
+  /** The owner's working notes for a chapter: what happened, the photos, Claude's draft. */
+  loadBuild(chapterId: string): Promise<ChapterBuild | null>;
+  saveBuild(chapterId: string, petId: string, build: ChapterBuild): Promise<void>;
+}
+
+export interface ChapterBuild {
+  sourceText: string;
+  photos: string[];
+  draft: unknown;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -249,14 +260,44 @@ const live: StoriesBackend = {
     return (data ?? []).map(sceneFromRow).sort((a, b) => a.position - b.position);
   },
 
-  async uploadImage(petId, file, folder) {
-    const img = await prepareImage(file);
+  async uploadImage(petId, file, folder, maxEdge = 1600) {
+    const img = await prepareImage(file, maxEdge);
     const path = `pets/${petId}/${folder.replace(/^\/+|\/+$/g, "")}/${randomId()}.${img.ext}`;
     const { error } = await browserSupabase()
       .storage.from(MEDIA_BUCKET)
       .upload(path, img.blob, { contentType: img.type, cacheControl: "31536000", upsert: false });
     if (error) fail("Uploading the photo", error);
     return path;
+  },
+
+  async uploadBlob(petId, path, blob, contentType) {
+    const full = `pets/${petId}/${path.replace(/^\/+/, "")}`;
+    const { error } = await browserSupabase()
+      .storage.from(MEDIA_BUCKET)
+      .upload(full, blob, { contentType, cacheControl: "31536000", upsert: true });
+    if (error) fail("Uploading", error);
+    return full;
+  },
+
+  async loadBuild(chapterId) {
+    const { data, error } = await browserSupabase()
+      .from("chapter_builds")
+      .select("source_text, photos, draft")
+      .eq("chapter_id", chapterId)
+      .maybeSingle();
+    if (error) fail("Loading the chapter's notes", error);
+    if (!data) return null;
+    return { sourceText: (data.source_text as string) ?? "", photos: (data.photos as string[]) ?? [], draft: data.draft };
+  },
+
+  async saveBuild(chapterId, petId, build) {
+    const { error } = await browserSupabase()
+      .from("chapter_builds")
+      .upsert(
+        { chapter_id: chapterId, pet_id: petId, source_text: build.sourceText.slice(0, 6000), photos: build.photos.slice(0, 12), draft: build.draft },
+        { onConflict: "chapter_id" },
+      );
+    if (error) fail("Saving the chapter's notes", error);
   },
 };
 
@@ -267,6 +308,7 @@ const DEMO_KEY = "kittyfive-demo-stories-v1";
 interface DemoState {
   stories: PetStories;
   chapters: Record<string, Chapter>;
+  builds?: Record<string, ChapterBuild>;
 }
 
 let demoState: DemoState | null = null;
@@ -473,6 +515,21 @@ const demo: StoriesBackend = {
 
   async uploadImage(_petId, file) {
     return imageToDataUrl(file);
+  },
+
+  async uploadBlob() {
+    throw new Error("Clips are stored on the live site only. Demo mode keeps edits in this browser, which is too small for a clip's frames.");
+  },
+
+  async loadBuild(chapterId) {
+    const b = loadDemo().builds?.[chapterId];
+    return b ? clone(b) : null;
+  },
+
+  async saveBuild(chapterId, _petId, build) {
+    const s = loadDemo();
+    s.builds = { ...(s.builds ?? {}), [chapterId]: clone(build) };
+    saveDemo();
   },
 };
 

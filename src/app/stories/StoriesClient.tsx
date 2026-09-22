@@ -318,7 +318,7 @@ export default function StoriesClient({ initial }: { initial: PetStories }) {
                 canMoveDown={index < stories.volumes.length - 1}
                 onMove={(d) => moveVolume(index, d)}
                 onEditVolume={() => setEditor({ kind: "volume", mode: "edit", volume })}
-                onAddChapter={() => setEditor({ kind: "chapter", mode: "create", volumeId: volume.id })}
+                onAddChapter={() => router.push(`/stories/new?volume=${volume.slug}${demoSuffix("&")}`)}
                 onEditChapter={(chapter) => setEditor({ kind: "chapter", mode: "edit", chapter })}
                 onReorder={(ids) => reorderChapters(volume.id, ids)}
               />
@@ -377,12 +377,18 @@ export default function StoriesClient({ initial }: { initial: PetStories }) {
           onClose={() => setEditor(null)}
           extra={
             editor.mode === "edit" ? (
-              <Link
-                href={`/stories/${editor.chapter.slug}`}
-                className="text-[14px] text-accent underline-offset-4 hover:underline"
-              >
-                Open the chapter →
-              </Link>
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
+                <Link
+                  href={`/stories/${editor.chapter.slug}/edit${demoSuffix("?")}`}
+                  className="text-accent underline-offset-4 hover:underline"
+                  data-edit-scenes
+                >
+                  Scenes, prompts and clips →
+                </Link>
+                <Link href={`/stories/${editor.chapter.slug}${demoSuffix("?")}`} className="text-fg/80 underline-offset-4 hover:underline">
+                  Read it →
+                </Link>
+              </div>
             ) : null
           }
         />
@@ -411,6 +417,12 @@ export default function StoriesClient({ initial }: { initial: PetStories }) {
       ) : null}
     </>
   );
+}
+
+/** Keep ?demo=1 on links while in forced demo mode (the harness uses it). */
+function demoSuffix(joiner: "?" | "&"): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("demo") === "1" ? `${joiner}demo=1` : "";
 }
 
 const FOOT_LINK =

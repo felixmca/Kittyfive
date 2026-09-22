@@ -136,7 +136,21 @@ function fadeStyle(el: HTMLElement, f: number, reduced: boolean): void {
 export default function StoryScene({ scene, index, prev, next, hint, current, onCurrent }: StorySceneProps) {
   const enterKind: SceneTransition | null = prev ? resolvePair(prev, scene) : null;
   const exitKind: SceneTransition | null = next ? resolvePair(scene, next) : null;
-  const cutout = prev?.cutout ?? scene.cutout;
+  const cutoutSrc = prev?.cutout ?? scene.cutout;
+  // Only use the cut-out once it has actually loaded: until the owner adds
+  // one, the walk falls back to the drawn silhouette instead of nothing.
+  const [cutoutOk, setCutoutOk] = useState(false);
+  useEffect(() => {
+    if (!cutoutSrc || typeof Image === "undefined") return;
+    let live = true;
+    const img = new Image();
+    img.onload = () => live && setCutoutOk(true);
+    img.src = cutoutSrc;
+    return () => {
+      live = false;
+    };
+  }, [cutoutSrc]);
+  const cutout = cutoutOk ? cutoutSrc : undefined;
 
   const distance = Math.abs(index - current);
   const active = distance <= 1;

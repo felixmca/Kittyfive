@@ -1,0 +1,13 @@
+{
+  "id": "01-a-cold-night",
+  "frames": 72,
+  "still": true,
+  "extras": [
+    {
+      "name": "end-frame",
+      "src": "/story/01-a-cold-night/extras/end-frame.webp",
+      "width": 900,
+      "height": 1200
+    }
+  ]
+}
