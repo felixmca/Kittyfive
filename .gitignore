@@ -17,3 +17,7 @@ public/basis/
 assets-raw/**
 !assets-raw/**/
 !assets-raw/**/README.md
+
+.vercel
+.env*
+!.env.example

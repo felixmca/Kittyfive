@@ -68,7 +68,7 @@ return 200 (the money is already taken; the owner fulfils by hand).
 1. Create a project. Copy the URL to `NEXT_PUBLIC_SUPABASE_URL` and the
    **service_role** key to `SUPABASE_SERVICE_ROLE_KEY` (server-only, never
    `NEXT_PUBLIC_`).
-2. Run `supabase/schema.sql` in the SQL editor. It creates `orders`,
+2. Run `supabase/commerce.sql` in the SQL editor (or convert it to a migration in Phase 6). It creates `orders`,
    `order_items`, `order_events`, enables RLS with **no policies**, and creates
    the `snacks_public` view (count + last snack time) for a public counter.
 3. Nothing in the browser ever reads or writes these tables. The Supabase

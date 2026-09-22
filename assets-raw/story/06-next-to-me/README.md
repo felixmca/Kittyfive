@@ -1,6 +1,6 @@
 # Chapter 6 · Next to me
 
-*Now · volume: The sofa on the river*
+*Now · volume: The neighbour*
 
 **On screen:** "She's been next to me the entire time I've been building this."
 

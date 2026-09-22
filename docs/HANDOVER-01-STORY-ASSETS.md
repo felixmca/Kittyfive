@@ -13,7 +13,7 @@ also a chapter in the Stories page, inside the volume that fits it.
 | 3 | **A flat on the Thames** | November 2025 · Pacific Wharf | *The sofa on the river* |
 | 4 | **Thousands of flyers** | 23 Dec 2025 – April 2026 | *What the flyer said* |
 | 5 | **And there she was** | April 2026 | *The neighbour* |
-| 6 | **Next to me** | Now | *The sofa on the river* |
+| 6 | **Next to me** | Now | *The neighbour* |
 
 ---
 
@@ -233,7 +233,7 @@ day. No photos of the neighbour.
 
 ## 6 · Next to me
 
-*Now · volume: The sofa on the river*
+*Now · volume: The neighbour*
 
 **On screen:** "She's been next to me the entire time I've been building this."
 

@@ -59,7 +59,7 @@ chapter also lives in its volume on the Stories page.
 | 3 | A flat on the Thames | The sofa on the river | the flyer falls |
 | 4 | Thousands of flyers | What the flyer said | crossfade |
 | 5 | And there she was | The neighbour | slide up |
-| 6 | Next to me | The sofa on the river | → turntable, then the two buttons |
+| 6 | Next to me | The neighbour | → turntable, then the two buttons |
 
 **Felix**
 - [ ] Six clips, start frames and extras into `assets-raw/story/<chapter>/`

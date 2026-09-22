@@ -24,6 +24,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { SITE } from "@/config/site";
 import { scrollToBottom, scrollToTop, useUi } from "@/lib/store";
+import { hasStoredSession } from "@/lib/supabase/sessionHint";
 import { getLenis } from "@/components/smooth/SmoothScroll";
 
 const TRY_ON_HREF = "/try-on";
@@ -209,6 +210,11 @@ function Drawer({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  // Read when the drawer opens, so it is right after signing in or out.
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    if (open) setSignedIn(hasStoredSession());
+  }, [open]);
   // Closing lifts the scroll lock in an effect *after* this render commits,
   // and Lenis ignores scrollTo() while stopped, so the scroll itself waits a
   // frame. Without Lenis (reduced motion) the deferral is harmless.
@@ -285,6 +291,14 @@ function Drawer({
             glyph={<ArrowGlyph />}
           >
             {SITE.nav.store.label}
+          </DrawerRow>
+          <DrawerRow
+            href={SITE.nav.account.href}
+            current={pathname === SITE.nav.account.href}
+            onClick={onClose}
+            glyph={<ArrowGlyph />}
+          >
+            {signedIn ? SITE.nav.account.label : "Sign in"}
           </DrawerRow>
         </nav>
 
