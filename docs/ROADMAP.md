@@ -222,7 +222,8 @@ to render on phones and easier to make charming.
       try on a real person, then to become the default)*
 - [ ] Kitty stands next to you in 3D *(23 Sep: the drawn 3D cat now walks over
       and sits beside whoever is being tracked, turned towards them, and
-      follows when they move; next, the real Kitty model and a floor under you)*
+      follows when they move; with your feet in the picture she sits on your
+      floor at a cat's size next to you. Next: the real Kitty model)*
 - [ ] Upgrade path: Snap Camera Kit Web (application-gated) for draped cloth
 
 ## Phase 5 · Subscribe to Kitty Stories by email

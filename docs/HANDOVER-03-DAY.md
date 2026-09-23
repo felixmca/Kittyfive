@@ -368,4 +368,8 @@ send is used up for nothing.
   exist). It takes them back the moment you scroll up to it.
 - An accessibility check (axe, WCAG 2.1 AA) over every page found no
   violations; two small fixes from what it flagged.
+- **In the try-on, Kitty sits on your floor** when your feet are in the
+  picture (stand back): on the same floor as you and a cat's size next to
+  you, instead of at the bottom of the screen. In a selfie she stays where
+  she was.
 
