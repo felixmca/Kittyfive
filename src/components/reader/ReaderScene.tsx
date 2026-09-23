@@ -94,6 +94,8 @@ export default function ReaderScene({
     }
     const total = seq.total;
     const target = total > 1 ? Math.round(progress.current * (total - 1)) : 0;
+    // Only frames near the scroll position stay decoded (useFrameSequence).
+    seq.focus(target);
     const idx = seq.nearestIndex(target);
     if (idx < 0 || (idx === drawn.current && !resized)) return;
     const img = seq.getFrame(idx);

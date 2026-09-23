@@ -37,7 +37,7 @@ const BASE = (args.base ?? "http://localhost:3201").replace(/\/$/, "");
 const VIEWPORTS = [
   { name: "390", width: 390, height: 844, mobile: true, engine: "chromium" },
   { name: "375", width: 375, height: 667, mobile: true, engine: "chromium", only: ["landing", "pages"] },
-  { name: "iphone", device: "iPhone 17 Pro", mobile: true, engine: "webkit", only: ["landing", "pages"] },
+  { name: "iphone", device: "iPhone 17 Pro", mobile: true, engine: "webkit", only: ["landing", "pages", "stories"] },
   { name: "1280", width: 1280, height: 800, mobile: false, engine: "chromium" },
 ]
   .map((v) => (v.device ? { ...v, width: devices[v.device].viewport.width, height: devices[v.device].viewport.height } : v))
@@ -146,12 +146,22 @@ async function withPage(browser, viewport, fn) {
       return false;
     }
   };
-  page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+  // WebKit reports Next.js prefetches (?_rsc=…) that a navigation cancels as
+  // errors ("… due to access control checks", "Failed to fetch RSC payload …
+  // Falling back to browser navigation"); Chromium reports the same thing as
+  // an aborted request, filtered below. They are not failures of the page.
+  const cancelledPrefetch = (text) =>
+    /_rsc=/.test(text) && /access control checks|Load failed|Failed to fetch RSC payload/.test(text);
+  page.on("pageerror", (e) => {
+    if (cancelledPrefetch(e.message)) return;
+    errors.push(`pageerror: ${e.message}`);
+  });
   page.on("console", (m) => {
     if (m.type() !== "error") return;
     // Browsers log every 4xx as a console error; the response handler below
     // already sorts expected probes from unexpected failures.
     if (/Failed to load resource/.test(m.text())) return;
+    if (cancelledPrefetch(m.text()) || /Failed to fetch RSC payload .* Falling back to browser navigation/.test(m.text())) return;
     const at = m.location()?.url ?? "";
     errors.push(`console: ${m.text().slice(0, 300)}${at ? ` @ ${at}` : ""}`);
   });
@@ -730,15 +740,22 @@ async function journeyReader(browser, viewport) {
     record(viewport.name, route, "reader opens on volume 1", /Vol 1/i.test(await chip()), await chip());
     let path = new URL(page.url()).pathname;
     const deadline = Date.now() + 40_000;
+    // Clip scenes keep only a window of frames decoded (useFrameSequence), even
+    // at a chapter boundary with two clips near the screen.
+    const decodedNow = () =>
+      page.evaluate(() => (window.__frameSequences?.() ?? []).reduce((n, s) => n + s.decoded, 0)).catch(() => 0);
+    let mostDecoded = 0;
     while (Date.now() < deadline && path === "/stories/a-cold-night") {
       await page.mouse.move(viewport.width / 2, viewport.height / 2);
       if (viewport.engine === "webkit" && viewport.mobile) await page.keyboard.press("PageDown");
       else await page.mouse.wheel(0, viewport.height * 0.8);
       await page.waitForTimeout(250);
+      mostDecoded = Math.max(mostDecoded, await decodedNow());
       path = new URL(page.url()).pathname;
     }
     const now = await chip();
     record(viewport.name, route, "scrolling on reaches the next volume's chapter", path === "/stories/five-by-dawn" && /Vol 2/i.test(now), `${path} · ${now}`);
+    record(viewport.name, route, "reader keeps only a window of frames decoded", mostDecoded > 0 && mostDecoded <= 70, `at most ${mostDecoded} decoded`);
     await page.screenshot({ path: join(OUT, `reader-${viewport.name}-vol2.png`) });
     record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));

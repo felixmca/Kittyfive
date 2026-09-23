@@ -147,3 +147,22 @@ this in the background; Safari does not. Frames are now decoded in two small
 background workers (tested: WebKit supports it; the main thread's longest
 pause dropped from 46 ms to 17 ms). If a browser cannot, it quietly uses the
 old way.
+
+### 8 · The same iPhone fix for the chapter pages, and a faster start
+
+- **Chapter pages** (`/stories/<chapter>`) had the landing's old problem:
+  every clip scene decoded its whole clip (≈170 MB) when it came near the
+  screen, and at a chapter boundary two could be near at once, more than an
+  iPhone allows. They now keep only the frames around the scroll position
+  (plus a keyframe every 12 frames for fast flicks): at most 34 frames
+  decoded while scrolling from volume 1 into volume 2, checked by
+  `npm run verify` in WebKit as an iPhone and in Chrome.
+- **The landing starts sooner.** It used to wait until the whole of chapter
+  1 could download before the part already there had played; it only needs
+  each frame by the time the playhead reaches it. On a phone's 4G (throttled,
+  with a 4× slower processor) the story now starts at about 2.8 s instead of
+  4.7 s, and the kitten photos wait until chapter 1 is in so they do not
+  compete with it.
+- Measured on the live site (fast 4G, 4× CPU): first paint 0.5 s; the store's
+  3D room appears at about 5.9 s (slow 4G 8.6 s), still over the roadmap's 3 s
+  target, which is mostly three.js arriving and starting; next step there.
