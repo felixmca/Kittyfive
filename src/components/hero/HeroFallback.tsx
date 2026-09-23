@@ -5,7 +5,7 @@
  * needs no request and no licence. The whole thing is a button to /try-on,
  * matching the 3D camera's behaviour.
  */
-import { ACCENT } from "./CameraModel";
+import { ACCENT } from "./palette";
 
 interface HeroFallbackProps {
   onActivate: () => void;

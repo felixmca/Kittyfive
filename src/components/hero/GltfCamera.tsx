@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { useGLTF } from "@react-three/drei";
 import { CAMERA_HEIGHT } from "./CameraModel";
 
+/** Also named in Hero.tsx, which must not import this module (it pulls in three.js). */
 export const CAMERA_GLB = "/models/camera.glb";
 /** Draco decoders are copied into public/draco by scripts/copy-decoders.mjs; no CDN. */
 const DRACO_PATH = "/draco/";

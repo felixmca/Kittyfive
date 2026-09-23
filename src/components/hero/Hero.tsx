@@ -20,14 +20,20 @@
  * window/document touch is still guarded so a plain import would not crash.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Canvas } from "@react-three/fiber";
 import { SITE } from "@/config/site";
 import ErrorBoundary from "./ErrorBoundary";
-import HeroScene from "./HeroScene";
 import HeroFallback from "./HeroFallback";
-import { CAMERA_GLB } from "./GltfCamera";
+
+/** The camera model, when there is one (else the procedural camera). */
+const CAMERA_GLB = "/models/camera.glb";
+
+// three.js (the landing's biggest script) loads on its own, after the words
+// and the story have what they need; if it never arrives, the boundary around
+// it shows the SVG camera (see HeroCanvas.tsx).
+const HeroCanvas = dynamic(() => import("./HeroCanvas"), { ssr: false });
 
 const TRY_ON = "/try-on";
 /** Delay before navigating so the shutter squash is visible. */
@@ -181,23 +187,7 @@ export default function Hero() {
           <HeroFallback onActivate={activate} />
         ) : webgl === true ? (
           <ErrorBoundary fallback={<HeroFallback onActivate={activate} />} label="hero canvas">
-            <Canvas
-              dpr={[1, 2]}
-              gl={{
-                alpha: true,
-                antialias: true,
-                powerPreference: "high-performance",
-                failIfMajorPerformanceCaveat: false,
-              }}
-              frameloop={frameloop}
-              camera={{ position: [0, 0.55, 4.6], fov: 30, near: 0.1, far: 30 }}
-              onCreated={({ gl }) => {
-                gl.setClearColor(0x000000, 0);
-              }}
-              aria-hidden="true"
-            >
-              <HeroScene onActivate={activate} reducedMotion={reduced} useGlb={hasGlb} />
-            </Canvas>
+            <HeroCanvas frameloop={frameloop} onActivate={activate} reducedMotion={reduced} useGlb={hasGlb} />
           </ErrorBoundary>
         ) : null}
       </div>

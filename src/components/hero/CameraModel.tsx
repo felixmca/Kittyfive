@@ -17,8 +17,8 @@ import type { ThreeElements } from "@react-three/fiber";
 export const CAMERA_HEIGHT = 1.34;
 /** Vertical centre of the procedural camera's bounding box. */
 export const CAMERA_CENTER_Y = 0.17;
-/** Kitty's collar-tag yellow, also --accent in globals.css. */
-export const ACCENT = "#ffd166";
+export { ACCENT } from "./palette";
+import { ACCENT } from "./palette";
 
 const BODY = { color: "#1c1c20", roughness: 0.7, metalness: 0.15 } as const;
 const GRIP = { color: "#121214", roughness: 0.95, metalness: 0 } as const;
