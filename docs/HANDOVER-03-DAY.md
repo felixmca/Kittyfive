@@ -320,6 +320,8 @@ the harness), so it stays behind the switch until you have tried it. Tell the
 next session what looks wrong (too wide, sleeves too thick, hem too long) and
 it becomes the default. Without the switch nothing changes.
 
+![The fitted hoodie on a posed test body (the green is the test camera), one arm raised, the other hand in front; Kitty on the floor](screenshots/day-23/13-try-on-fitted-hoodie-test-pose.jpg)
+
 ### 13 · Phase 5: new chapters by email (built, off until there is a domain)
 
 With Phases 1–4 built and waiting on you, I built the email subscriptions so
@@ -345,6 +347,9 @@ in Resend, then `RESEND_API_KEY` and `EMAIL_FROM` on Vercel. Until then the
 panel says sending is off and the buttons are disabled, so no chapter's one
 send is used up for nothing.
 
+![Your email panel on /stories (demo mode)](screenshots/day-23/14-stories-email-panel-demo.jpg)
+![What a chapter email looks like](screenshots/day-23/15-chapter-email-preview.jpg)
+
 ### 14 · When the phone's signal drops, and other small things
 
 - **The landing survives a script that never arrives.** On a weak signal, one
@@ -355,7 +360,8 @@ send is used up for nothing.
   blocking it.
 - **Error and "not found" pages** in Kitty's words ("Something fell off the
   shelf." / "Kitty looked everywhere. It isn't here."), with Try again and
-  the way home, instead of the framework's bare text.
+  the way home, instead of the framework's bare text
+  ([screenshot](screenshots/day-23/16-not-found.jpg)).
 - **Signing in brings you back.** "Sign in to get them" on /stories returns
   you to /stories once you are in (only ever to a page on this site).
 - **The self-hosting guide** for Phase 7 is written ([SELF-HOSTING.md](SELF-HOSTING.md)),
