@@ -37,7 +37,7 @@ const BASE = (args.base ?? "http://localhost:3201").replace(/\/$/, "");
 const VIEWPORTS = [
   { name: "390", width: 390, height: 844, mobile: true, engine: "chromium" },
   { name: "375", width: 375, height: 667, mobile: true, engine: "chromium", only: ["landing", "pages"] },
-  { name: "iphone", device: "iPhone 17 Pro", mobile: true, engine: "webkit", only: ["landing", "pages", "stories", "store", "admin"] },
+  { name: "iphone", device: "iPhone 17 Pro", mobile: true, engine: "webkit", only: ["landing", "pages", "stories", "store", "admin", "account"] },
   { name: "1280", width: 1280, height: 800, mobile: false, engine: "chromium" },
 ]
   .map((v) => (v.device ? { ...v, width: devices[v.device].viewport.width, height: devices[v.device].viewport.height } : v))
@@ -634,6 +634,69 @@ async function journeyStories(browser, viewport) {
     record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
   });
+  await checkTilePictureFailures(browser, viewport);
+  await checkTilePicturesArrive(browser, viewport);
+}
+
+/** Every tile picture arrives, first time, including the lazy ones further down (no false "broken"). */
+async function checkTilePicturesArrive(browser, viewport) {
+  const route = "/stories (all tile pictures)";
+  await withPage(browser, viewport, async (page) => {
+    await goto(page, "/stories");
+    await page.evaluate(async () => {
+      for (let y = 0; y < document.body.scrollHeight; y += 300) {
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 120));
+      }
+    });
+    await page.waitForTimeout(1500);
+    const imgs = await page.$$eval("[data-chapter-tile] [data-tile-face] img", (els) =>
+      els.map((i) => ({ src: i.getAttribute("src") ?? "", loaded: i.complete && i.naturalWidth > 0 })),
+    );
+    const missing = imgs.filter((i) => !i.loaded || i.src.includes("retry=")).map((i) => i.src.replace(/^.*\/story\//, ""));
+    record(viewport.name, route, "every tile picture arrives, none retried", imgs.length >= 4 && missing.length === 0, `${imgs.length} pictures${missing.length ? `; not right: ${missing.join(", ")}` : ""}`);
+  });
+}
+
+/**
+ * iOS Safari draws a "?" box for a picture that failed, and keeps the failure
+ * (Felix's phone showed one on chapter 1's tile, 23 Sep). A tile picture that
+ * fails once is asked for again under a fresh address; one that never loads is
+ * dropped, and the other picture fills the tile on its own. The failures are
+ * made on purpose here, so this runs outside withPage's error tracking.
+ */
+async function checkTilePictureFailures(browser, viewport) {
+  const route = "/stories (a tile picture fails)";
+  const still = "/story/01-a-cold-night/still.webp";
+  const tile = '[data-chapter-tile="a-cold-night"]';
+  const pictures = (page) =>
+    page.$$eval(`${tile} [data-tile-face] img`, (imgs) =>
+      imgs.map((i) => ({ src: i.getAttribute("src") ?? "", loaded: i.complete && i.naturalWidth > 0, masked: Boolean(i.style.maskImage || i.style.webkitMaskImage) })),
+    );
+  for (const always of [false, true]) {
+    const context = await newContext(browser, viewport);
+    const page = await context.newPage();
+    try {
+      await page.route(
+        (u) => u.pathname === still,
+        (r) => (!always && new URL(r.request().url()).searchParams.has("retry") ? r.continue() : r.abort()),
+      );
+      await goto(page, "/stories");
+      await page.waitForTimeout(800);
+      const imgs = await pictures(page);
+      const detail = imgs.map((i) => `${i.src.replace(/^.*\/story\//, "")}${i.loaded ? "" : " (not loaded)"}${i.masked ? " masked" : ""}`).join(", ");
+      if (!always) {
+        const a = imgs.find((i) => i.src.includes("still.webp"));
+        record(viewport.name, route, "a picture that failed once loads on the retry", !!a && a.src.includes("retry=1") && a.loaded, detail);
+      } else {
+        const gone = !imgs.some((i) => i.src.includes("still.webp"));
+        const b = imgs.find((i) => i.src.includes("end-frame"));
+        record(viewport.name, route, "a picture that never loads is dropped, the other fills the tile", gone && !!b && b.loaded && !b.masked, detail);
+      }
+    } finally {
+      await context.close();
+    }
+  }
 }
 
 async function journeyTryOn(browser, viewport) {
@@ -1046,6 +1109,60 @@ async function journeyAdmin(browser, viewport) {
   });
 }
 
+/**
+ * The account page's order of things, the Birthday Lobby way (its
+ * PASSWORD-RESET.md), in demo mode so no mail is sent: the reset form answers
+ * the same whatever the address; a reset link lands on "Choose a new
+ * password", never the signed-in page; a dead link says so and offers the
+ * form; and the address bar loses the link's parameters but keeps ?demo=1.
+ * (Where the live links point is a Supabase setting: Site URL.)
+ */
+async function journeyAccount(browser, viewport) {
+  const route = "/account (reset, demo)";
+  await withPage(browser, viewport, async (page, errors, bad) => {
+    const land = async (hash) => {
+      await page.goto("about:blank");
+      await goto(page, `/account?demo=1${hash}`);
+    };
+    await land("");
+    await page.evaluate(() => localStorage.removeItem("kittyfive-demo-auth"));
+    await land("");
+    await page.click('button:has-text("Forgotten your password?")');
+    await page.fill("#acct-email", "someone@example.com");
+    await page.click('button:has-text("Send the link")');
+    const sent = await page.waitForSelector('[data-auth-sent="reset"]', { timeout: 10_000 }).catch(() => null);
+    const said = sent ? ((await sent.textContent()) ?? "") : "";
+    record(viewport.name, route, "the reset form answers the same for any address", /If someone@example\.com has an account/.test(said), said.slice(0, 70));
+
+    await land("#type=recovery");
+    const setPw = await page.waitForSelector("[data-set-password]", { timeout: 10_000 }).catch(() => null);
+    record(viewport.name, route, "a reset link lands on Choose a new password", !!setPw);
+    const url = page.url().replace(BASE, "");
+    record(viewport.name, route, "the link's parameters are scrubbed, ?demo=1 kept", !/type=recovery/.test(url) && /demo=1/.test(url), url);
+    if (setPw) {
+      await page.fill("#new-pw", "short");
+      await page.fill("#new-pw2", "short");
+      await page.click('button:has-text("Save password")');
+      const refused = await page.$("[data-set-password] [role=alert]");
+      record(viewport.name, route, "a short password is refused", !!refused);
+      await page.fill("#new-pw", "a-long-enough-password");
+      await page.fill("#new-pw2", "a-long-enough-password");
+      await page.click('button:has-text("Save password")');
+      const saved = await page.waitForSelector("text=New password saved", { timeout: 10_000 }).catch(() => null);
+      record(viewport.name, route, "the new password is saved and you are signed in", !!saved);
+      await page.screenshot({ path: join(OUT, `account-${viewport.name}-new-password.png`) });
+    }
+
+    await page.evaluate(() => localStorage.removeItem("kittyfive-demo-auth"));
+    await land("#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired");
+    const notice = (await page.$eval("main [role=alert]", (el) => el.textContent ?? "").catch(() => "")) ?? "";
+    const form = await page.$('[data-auth-form="forgot"]');
+    record(viewport.name, route, "a dead link says so and offers a new one", /That link did not work: Email link is invalid/.test(notice) && !!form, notice.slice(0, 70));
+    record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+    record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+  });
+}
+
 /** Every page wears Kitty's home button, and it takes you back to the story. */
 async function journeyPages(browser, viewport) {
   await withPage(browser, viewport, async (page, errors, bad) => {
@@ -1140,6 +1257,7 @@ async function main() {
     stories: [journeyStories, journeyReader, journeyStoriesOwner, journeySubscriptions],
     tryon: [journeyTryOn, journeyCap3D, journeyFit],
     admin: [journeyAdmin],
+    account: [journeyAccount],
     pages: [journeyPages, journeyA11y],
   };
   try {

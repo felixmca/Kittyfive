@@ -42,16 +42,22 @@ export default function AccountClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Saving the new password ends recovery in the store; the form (which then
+  // says "saved") stays on screen rather than swapping to the signed-in page
+  // mid-save, which would also lose its "saved" state.
+  const [recovering, setRecovering] = useState(false);
+  if (auth.recovery && !recovering) setRecovering(true);
+
   // Signed in (now, or already) and sent here from somewhere: go back there.
   useEffect(() => {
-    if (!auth.ready || !auth.user || auth.recovery) return;
+    if (!auth.ready || !auth.user || auth.recovery || recovering) return;
     const next = nextPath();
     if (next) router.replace(next);
-  }, [auth.ready, auth.user, auth.recovery, router]);
+  }, [auth.ready, auth.user, auth.recovery, recovering, router]);
 
   let body: ReactNode;
   if (!auth.ready) body = <p className="text-muted">One moment…</p>;
-  else if (auth.recovery && auth.user) body = <SetPassword />;
+  else if ((auth.recovery || recovering) && auth.user) body = <SetPassword />;
   else if (auth.user) body = <SignedIn />;
   else body = <AuthForms />;
 

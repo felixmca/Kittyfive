@@ -120,9 +120,25 @@ export const useAuth = create<AuthState>((set, get) => ({
     started = true;
 
     if (!liveMode()) {
-      const user = demoUser();
-      set({ mode: "demo", ready: true, user, isAdmin: Boolean(user) });
+      // Demo links behave like real ones (a reset link signs you in and asks
+      // for a new password; a dead one says so), so the harness can prove the
+      // account page's order of things without a real mailbox.
+      let user = demoUser();
+      const recovery = authLanding.type === "recovery";
+      if (recovery && !user) {
+        saveDemoUser("demo@example.com");
+        user = { id: "demo-user", email: "demo@example.com", displayName: null };
+      }
+      set({
+        mode: "demo",
+        ready: true,
+        user,
+        isAdmin: Boolean(user),
+        recovery,
+        notice: authLanding.error ? `That link did not work: ${authLanding.error}. Ask for a new one below.` : null,
+      });
       rememberAdmin(Boolean(user));
+      if (authLanding.type || authLanding.error || authLanding.tokenHash) scrubAuthParamsFromUrl();
       return;
     }
 

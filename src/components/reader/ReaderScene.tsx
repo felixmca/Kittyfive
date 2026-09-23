@@ -16,6 +16,7 @@
  * stay, stacked in the lower third over a dark gradient.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import RetryImg from "@/components/RetryImg";
 import { useFrameSequence } from "@/components/story/useFrameSequence";
 import { frameSize } from "@/components/story/frameLoader";
 import { mediaUrl } from "@/lib/supabase/config";
@@ -165,16 +166,14 @@ export default function ReaderScene({
             background: `radial-gradient(120% 80% at 30% 20%, hsl(${hue} 30% 22%), transparent 60%), radial-gradient(100% 70% at 80% 90%, hsl(${(hue + 60) % 360} 34% 16%), transparent 65%), #0d0d0f`,
           }}
         />
-        {showImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+        {showImage && imageUrl ? (
+          <RetryImg
             ref={imgRef}
-            src={imageUrl ?? undefined}
-            alt=""
+            src={imageUrl}
             draggable={false}
             decoding="async"
             loading={near ? "eager" : "lazy"}
-            onError={() => setImageFailed(true)}
+            onGiveUp={() => setImageFailed(true)}
             className="absolute inset-0 h-full w-full object-cover will-change-transform"
             style={{ objectPosition: `${(scene.focus?.x ?? 0.5) * 100}% ${(scene.focus?.y ?? 0.42) * 100}%` }}
           />

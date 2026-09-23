@@ -18,6 +18,8 @@
  *     `hideCameraUntilScrolled` it stays hidden until the page has scrolled
  *     past 60% of the viewport (so the landing's hero camera is not doubled);
  *  5. the toast renderer for useUi().toast, bottom-centre.
+ *  6. a strip of the page dark under an iPhone status bar, so content that
+ *     scrolls up behind the clock does not clash with it.
  *
  * Pages render this themselves (not the root layout) so each can choose its
  * camera button (`hideCamera`, `hideCameraUntilScrolled`). Pages that put
@@ -157,6 +159,7 @@ export default function Chrome({ hideCameraUntilScrolled = false, hideCamera = f
 
   return (
     <>
+      <StatusBarScrim />
       {/* A landmark for the fixed controls, so screen readers can jump to them
           (they are position: fixed; the nav itself takes no space). */}
       <nav aria-label="Quick links">
@@ -167,6 +170,29 @@ export default function Chrome({ hideCameraUntilScrolled = false, hideCamera = f
       <Drawer ref={panelRef} open={drawerOpen} onClose={close} />
       <Toast />
     </>
+  );
+}
+
+/* ---------------------------------------------------------- status bar */
+
+/**
+ * On an iPhone the page runs up under the status bar (viewport-fit=cover), so
+ * whatever scrolls up there sits behind the clock: on /stories the gold
+ * "Start from the beginning" button did. A strip of the page's own dark,
+ * exactly as tall as the status bar and fading at its lower edge, keeps the
+ * clock readable. It has no height where there is no inset (desktop).
+ */
+function StatusBarScrim() {
+  return (
+    <div
+      aria-hidden
+      data-status-scrim
+      className="pointer-events-none fixed inset-x-0 top-0 z-[45]"
+      style={{
+        height: "env(safe-area-inset-top)",
+        background: "linear-gradient(to bottom, rgba(11,11,12,0.94) 55%, rgba(11,11,12,0))",
+      }}
+    />
   );
 }
 

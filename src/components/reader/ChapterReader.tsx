@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Chrome from "@/components/chrome/Chrome";
 import { CHROME_TOP, CLEAR_OF_HOME } from "@/components/chrome/layout";
+import RetryImg from "@/components/RetryImg";
 import SubscribeCard from "@/components/stories/SubscribeCard";
 import TileFace from "@/components/stories/TileFace";
 import ReaderScene, { type SceneRegistry } from "./ReaderScene";
@@ -311,8 +312,7 @@ function CameraRoll({ dir }: { dir: string | null }) {
       </p>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-2 [scrollbar-width:none] sm:px-8">
         {extras.map((e) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <RetryImg
             key={e.src}
             src={e.src}
             alt=""

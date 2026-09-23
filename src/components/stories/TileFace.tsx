@@ -1,3 +1,4 @@
+"use client";
 /**
  * The face of a chapter: date, title, subtitle, description, over up to two
  * background images that blend into each other along a gradient.
@@ -7,12 +8,14 @@
  * `blend.to`%. So with the default (180°, 35%→70%) the top of the tile is A,
  * the bottom is B, and they dissolve into each other in the middle third.
  * With no images the tile gets a gradient seeded from its slug, so a new
- * chapter still looks designed.
+ * chapter still looks designed. A picture that will not load is dropped
+ * (RetryImg); if A goes, B fills the tile on its own.
  *
  * Used three ways: as a tile in the grid, as the live preview in the tile
  * editor, and full-screen as a chapter's opening page in the reader.
  */
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import RetryImg from "@/components/RetryImg";
 import { mediaUrl } from "@/lib/supabase/config";
 import { storyDateText, type TileBlend } from "@/lib/stories/types";
 
@@ -63,8 +66,12 @@ export function TileBackdrop({
   eager?: boolean;
   className?: string;
 }) {
-  const a = mediaUrl(data.tileImageA) ?? mediaUrl(data.tileImageB);
-  const b = data.tileImageA ? mediaUrl(data.tileImageB) : null;
+  const srcA = mediaUrl(data.tileImageA) ?? mediaUrl(data.tileImageB);
+  const srcB = data.tileImageA ? mediaUrl(data.tileImageB) : null;
+  const [lost, setLost] = useState<string | null>(null);
+  const aGone = srcA !== null && lost === srcA;
+  const a = aGone ? srcB : srcA;
+  const b = aGone ? null : srcB;
   const mask = blendMask(data.tileBlend);
   const maskStyle: CSSProperties = { maskImage: mask, WebkitMaskImage: mask };
   return (
@@ -74,21 +81,20 @@ export function TileBackdrop({
       style={{ background: fallbackBackground(data.slug) }}
     >
       {a ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <RetryImg
+          key={a}
           src={a}
-          alt=""
           draggable={false}
           loading={eager ? "eager" : "lazy"}
           decoding="async"
           className="absolute inset-0 h-full w-full object-cover"
+          onGiveUp={() => setLost(srcA)}
         />
       ) : null}
       {b ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <RetryImg
+          key={b}
           src={b}
-          alt=""
           draggable={false}
           loading={eager ? "eager" : "lazy"}
           decoding="async"
