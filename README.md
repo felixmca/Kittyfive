@@ -15,7 +15,8 @@ where she shows you the merch and talks back.
 | Doc | What it is |
 |---|---|
 | [docs/ROADMAP.md](docs/ROADMAP.md) | **The plan.** Phases with checklists; every session starts at the first unchecked box. |
-| [docs/HANDOVER-03-DAY.md](docs/HANDOVER-03-DAY.md) | The latest session: the iPhone fix, the Kitty home button, Kitty Tunables, the store's day and evening, the 3D cap. Its note for Felix is at the top. |
+| [docs/HANDOVER-03-DAY.md](docs/HANDOVER-03-DAY.md) | The latest session: the iPhone fix, the Kitty home button, Kitty Tunables, the store's day and evening, the 3D cap and the fitted hoodie (behind switches), new chapters by email (built, waiting on a domain), and hardening for weak phone signal. Its note for Felix is at the top. |
+| [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md) | Run your own copy for your pet: demo mode, Supabase, settings, Vercel. |
 | [docs/HANDOVER-04-STORE-PHOTOS.md](docs/HANDOVER-04-STORE-PHOTOS.md) | What to photograph for the store's 3D house and the 3D Kitty. |
 | [docs/HANDOVER-02-OVERNIGHT.md](docs/HANDOVER-02-OVERNIGHT.md) | The swipe-driven landing story, as first built. |
 | [docs/HANDOVER-01-STORY-ASSETS.md](docs/HANDOVER-01-STORY-ASSETS.md) | The landing story's four chapters: what to generate on artta and where to drop it. |
