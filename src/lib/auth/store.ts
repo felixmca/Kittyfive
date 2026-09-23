@@ -40,6 +40,8 @@ interface AuthState {
   signUp: (email: string, password: string, displayName: string) => Promise<{ error?: string; needsConfirm?: boolean }>;
   signIn: (email: string, password: string) => Promise<Result>;
   signOut: () => Promise<void>;
+  /** Delete the signed-in account for good (and its story subscriptions); an error message, or null. */
+  deleteAccount: () => Promise<string | null>;
   requestReset: (email: string) => Promise<Result>;
   setPassword: (password: string) => Promise<Result>;
   clearNotice: () => void;
@@ -199,6 +201,31 @@ export const useAuth = create<AuthState>((set, get) => ({
     await browserSupabase().auth.signOut();
     set({ user: null, isAdmin: false, recovery: false });
     rememberAdmin(false);
+  },
+
+  deleteAccount: async () => {
+    if (get().mode === "demo") {
+      try {
+        window.localStorage.removeItem("kittyfive-demo-subscriptions-v1");
+      } catch {
+        /* ignore */
+      }
+      await get().signOut();
+      return null;
+    }
+    const { error } = await browserSupabase().rpc("delete_my_account");
+    if (error) return "That didn't work. Try again, or sign out and back in first.";
+    editCache.clear();
+    // The account is gone; clear this browser's session too (the server may
+    // already refuse it, which is fine).
+    try {
+      await browserSupabase().auth.signOut({ scope: "local" });
+    } catch {
+      /* ignore */
+    }
+    set({ user: null, isAdmin: false, recovery: false });
+    rememberAdmin(false);
+    return null;
   },
 
   requestReset: async (email) => {

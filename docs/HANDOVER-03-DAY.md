@@ -379,5 +379,7 @@ send is used up for nothing.
 - **In the try-on, Kitty sits on your floor** when your feet are in the
   picture (stand back): on the same floor as you and a cat's size next to
   you, instead of at the bottom of the screen. In a selfie she stays where
-  she was.
+  she was.- **Delete my account** on /account (type DELETE to confirm): deletes the
+  sign-in and the person's story subscriptions, only ever their own
+  (`delete_my_account()`, covered by the RLS smoke test).
 

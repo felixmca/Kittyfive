@@ -29,8 +29,9 @@ by us. The site's fonts come from Google Fonts.
 
 Your **email address** and a **display name** (optional), kept by Supabase
 (our database and sign-in provider) so you can sign in. Your password is
-stored only as a hash by Supabase. Delete your account by [writing to
-contact address]; your subscriptions go with it.
+stored only as a hash by Supabase. Delete your account yourself on
+**Your account → Delete my account**; your story subscriptions go with it
+(stories you made stay on the site unless you ask).
 
 ### If you get new chapters by email
 

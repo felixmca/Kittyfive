@@ -199,6 +199,26 @@ begin
   if n < 1 then raise exception 'the send log is not readable by the admin'; end if;
 end $$;
 
+-- ── deleting your own account ─────────────────────────────────────────────
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+do $$
+begin
+  if not public.delete_my_account() then raise exception 'delete_my_account did not say yes'; end if;
+end $$;
+reset role;
+do $$
+begin
+  if exists (select 1 from auth.users where id = 'a0000000-0000-4000-8000-000000000002') then
+    raise exception 'the stranger''s account is still there';
+  end if;
+  if exists (select 1 from public.story_subscriptions where email = 'rls-stranger@example.com') then
+    raise exception 'the stranger''s subscriptions outlived their account';
+  end if;
+  if not exists (select 1 from auth.users where id = 'a0000000-0000-4000-8000-000000000001') then
+    raise exception 'deleting one account touched another';
+  end if;
+end $$;
+
 -- ── anonymous visitors do not see drafts ─────────────────────────────────
 reset role;
 set local role anon;

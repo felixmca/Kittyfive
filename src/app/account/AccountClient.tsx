@@ -324,6 +324,78 @@ function SignedIn() {
       >
         {busy ? "Signing out…" : "Sign out"}
       </button>
+      <DeleteAccount />
+    </div>
+  );
+}
+
+/** Delete the account for good, after typing DELETE (one tap is too easy on a phone). */
+function DeleteAccount() {
+  const auth = useAuth();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="self-start text-[14px] text-muted underline-offset-4 hover:text-fg hover:underline"
+        data-delete-account
+      >
+        Delete my account
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-red-400/30 bg-red-500/[0.06] p-5" data-delete-confirm>
+      <p className="text-[15px] leading-relaxed text-fg">
+        This deletes your account and any story emails you get, for good. Stories you made stay on the site.
+      </p>
+      <label htmlFor="delete-typed" className="mt-4 block text-[13px] text-muted">
+        Type DELETE to confirm
+      </label>
+      <input
+        id="delete-typed"
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+        autoComplete="off"
+        autoCapitalize="characters"
+        className="mt-1.5 w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-3 text-[16px] text-fg outline-none focus:border-red-300/70"
+      />
+      {error ? (
+        <p role="alert" className="mt-3 text-[14px] text-red-200">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          disabled={busy || typed.trim() !== "DELETE"}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            const err = await auth.deleteAccount();
+            setBusy(false);
+            if (err) setError(err);
+          }}
+          className="rounded-full bg-red-400/90 px-5 py-2.5 text-[15px] font-medium text-[#141414] disabled:opacity-40"
+          data-delete-go
+        >
+          {busy ? "Deleting…" : "Delete for good"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setTyped("");
+          }}
+          className="rounded-full border border-white/15 px-5 py-2.5 text-[15px] text-fg hover:border-white/35"
+        >
+          Keep it
+        </button>
+      </div>
     </div>
   );
 }
