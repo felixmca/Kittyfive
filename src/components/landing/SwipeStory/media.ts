@@ -81,6 +81,8 @@ function smallDevice(): boolean {
 interface ChapterFrames {
   dir: string;
   pattern?: string;
+  /** The clip's build (manifest builtAt), in every frame URL so a re-cut clip is fetched fresh. */
+  version?: string;
   clip: ClipInfo;
   /** Compressed bytes, once fetched. */
   blobs: (Blob | null)[];
@@ -142,6 +144,7 @@ export class StoryMedia {
       listed = null;
     }
     const patterns: (string | undefined)[] = [];
+    const versions: (string | undefined)[] = [];
     this.clips = await Promise.all(
       this.config.map(async (c, i) => {
         // No index at all (an old deploy): ask each chapter for its manifest.
@@ -151,6 +154,7 @@ export class StoryMedia {
           const m = await fetchManifest(this.dir(i), timeout.signal);
           if (!m) return null;
           patterns[i] = m.pattern;
+          versions[i] = m.version;
           return { frames: m.frames, width: m.width, height: m.height, duration: m.duration ?? m.frames / 14.3 };
         } catch {
           return null;
@@ -164,6 +168,7 @@ export class StoryMedia {
         ? {
             dir: this.dir(i),
             pattern: patterns[i],
+            version: versions[i],
             clip,
             blobs: new Array<Blob | null>(clip.frames).fill(null),
             missing: clip.frames,
@@ -189,7 +194,7 @@ export class StoryMedia {
         const last = ch.clip.frames;
         for (let attempt = 0; attempt < FETCH_TRIES && !ch.final; attempt++) {
           try {
-            const img = await loadFrame(frameUrl(ch.dir, ch.pattern, last), signal);
+            const img = await loadFrame(frameUrl(ch.dir, ch.pattern, last, ch.version), signal);
             if (signal.aborted || this.destroyed) {
               releaseFrame(img);
               return;
@@ -286,7 +291,7 @@ export class StoryMedia {
     c.fetching.add(idx);
     const { signal } = this.abort;
     schedule(
-      (sig) => fetchFrameBlob(frameUrl(c.dir, c.pattern, idx + 1), sig),
+      (sig) => fetchFrameBlob(frameUrl(c.dir, c.pattern, idx + 1, c.version), sig),
       () => this.fetchPriority(ch, idx),
       signal,
     ).then(

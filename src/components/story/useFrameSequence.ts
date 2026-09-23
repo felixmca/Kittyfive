@@ -295,7 +295,7 @@ export class SequenceController {
       const tasks = order.map((idx) =>
         schedule(
           async (sig) => {
-            const url = single ?? frameUrl(dir, manifest!.pattern, idx + 1);
+            const url = single ?? frameUrl(dir, manifest!.pattern, idx + 1, manifest!.version);
             const blob = await fetchFrameBlob(url, sig);
             if (sig.aborted) return;
             this.blobs[idx] = blob;

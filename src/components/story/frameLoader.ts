@@ -15,6 +15,8 @@ export interface FrameManifest {
   pattern?: string;
   /** Seconds of the clip the frames were cut from, when the pipeline knew it. */
   duration?: number;
+  /** When the frames were built (manifest `builtAt`): frame URLs carry it, so a re-cut clip is fetched fresh. */
+  version?: string;
 }
 
 export type FrameImage = ImageBitmap | HTMLImageElement;
@@ -114,7 +116,9 @@ export function fetchManifest(dir: string, signal?: AbortSignal): Promise<FrameM
   const cached = manifestCache.get(url);
   if (cached) return cached;
   const p = (async () => {
-    const res = await fetch(url, { signal, cache: "force-cache" });
+    // no-cache: revalidated each visit (cheap: a 304), so a re-cut clip's new
+    // frame count and version arrive at once.
+    const res = await fetch(url, { signal, cache: "no-cache" });
     if (!res.ok) return null;
     try {
       const json = (await res.json()) as Partial<FrameManifest>;
@@ -125,6 +129,7 @@ export function fetchManifest(dir: string, signal?: AbortSignal): Promise<FrameM
         height: typeof json.height === "number" ? json.height : 1280,
         pattern: typeof json.pattern === "string" ? json.pattern : "%04d.webp",
         duration: typeof json.duration === "number" && json.duration > 0 ? json.duration : undefined,
+        version: typeof (json as { builtAt?: unknown }).builtAt === "string" ? (json as { builtAt: string }).builtAt.replace(/\D/g, "").slice(0, 14) || undefined : undefined,
       };
     } catch {
       return null;
@@ -137,13 +142,13 @@ export function fetchManifest(dir: string, signal?: AbortSignal): Promise<FrameM
   return p;
 }
 
-/** Expand "%04d.webp" with a 1-based frame number. */
-export function frameUrl(dir: string, pattern: string | undefined, index1: number): string {
+/** Expand "%04d.webp" with a 1-based frame number (and the clip's version, when known). */
+export function frameUrl(dir: string, pattern: string | undefined, index1: number, version?: string): string {
   const pat = pattern ?? "%04d.webp";
   const name = pat.replace(/%0?(\d*)d/, (_m, width: string) =>
     String(index1).padStart(Number(width || "1"), "0"),
   );
-  return `${dir.replace(/\/$/, "")}/${name}`;
+  return `${dir.replace(/\/$/, "")}/${name}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 }
 
 // ─── decoding ────────────────────────────────────────────────────────────────

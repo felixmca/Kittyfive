@@ -268,7 +268,7 @@ export default function Turntable() {
       for (const idx of order) {
         schedule(
           async (sig) => {
-            const img = await loadFrame(frameUrl(TURNTABLE.dir, manifest.pattern, idx + 1), sig);
+            const img = await loadFrame(frameUrl(TURNTABLE.dir, manifest.pattern, idx + 1, manifest.version), sig);
             if (sig.aborted) {
               releaseFrame(img);
               return;
