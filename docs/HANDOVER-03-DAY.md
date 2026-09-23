@@ -352,3 +352,20 @@ send is used up for nothing.
 - **The self-hosting guide** for Phase 7 is written ([SELF-HOSTING.md](SELF-HOSTING.md)),
   and `.env.example` now names the Supabase key the code actually reads.
 
+### 15 · Two things that would have bitten later
+
+- **New clips and the turntable would not have shown for returning
+  visitors.** Everything under `/story` and `/turntable` was sent as "keep
+  for a year, never changes", including "not found". So anyone who visited
+  before you add the turntable video or the real MISSING flyer would have
+  kept seeing them missing for a year, and re-cutting a clip would have
+  mixed old and new frames. Now the lists of what exists are checked on
+  every visit, frames are named by when they were built (so a re-cut clip
+  is new to every browser), and everything else is kept for an hour.
+- **The end of the landing on an iPhone.** Once the story is finished and
+  scrolled out of view it now gives its video frames back (about 80 MB),
+  before the turntable decodes its own photos (about 120 MB once yours
+  exist). It takes them back the moment you scroll up to it.
+- An accessibility check (axe, WCAG 2.1 AA) over every page found no
+  violations; two small fixes from what it flagged.
+
