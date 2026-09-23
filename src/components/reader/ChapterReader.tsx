@@ -206,7 +206,8 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
     <>
       <Chrome />
       {entry ? (
-        <div
+        <nav
+          aria-label="Where you are in the book"
           // In the chrome row, beside Kitty's home button and clear of the menu.
           className="pointer-events-none fixed z-[40] flex h-11 items-center"
           style={{ top: CHROME_TOP, left: CLEAR_OF_HOME, maxWidth: "calc(100vw - 132px)" }}
@@ -223,7 +224,7 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
             </svg>
             <span className="truncate">{`Vol ${entry.volumeNumber} · ${entry.volumeTitle}`}</span>
           </Link>
-        </div>
+        </nav>
       ) : null}
       <main data-reader>
         {range.start === 0 ? null : <div className="h-px" aria-hidden />}

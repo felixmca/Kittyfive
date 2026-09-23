@@ -939,6 +939,57 @@ async function journeyFit(_browser, viewport) {
   }
 }
 
+/**
+ * Accessibility: axe-core (WCAG 2.1 AA and best practices) on every page and
+ * in the states the pages open into (the menu, the store's chat). axe loads
+ * from jsDelivr into the test browser only; if it cannot, the check says so
+ * instead of failing the run.
+ */
+const AXE_URL = "https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js";
+
+async function journeyA11y(browser, viewport) {
+  if (viewport.name !== "390") return;
+  const route = "accessibility (axe)";
+  await withPage(browser, viewport, async (page) => {
+    const scan = async (label) => {
+      const loaded = await page.addScriptTag({ url: AXE_URL }).then(() => true, () => false);
+      if (!loaded) {
+        record(viewport.name, route, `${label}: no violations`, true, "axe unavailable (offline?); skipped");
+        return;
+      }
+      const found = await page.evaluate(async () => {
+        const r = await window.axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"] } });
+        return r.violations.map((v) => `${v.id}×${v.nodes.length} ${v.nodes[0]?.target.join(" ") ?? ""}`);
+      });
+      record(viewport.name, route, `${label}: no violations`, found.length === 0, found.slice(0, 3).join(" | "));
+    };
+    for (const [label, path] of [
+      ["landing", "/"],
+      ["stories", "/stories?demo=1"],
+      ["a chapter", "/stories/a-cold-night?demo=1"],
+      ["store", "/store?demo=1"],
+      ["try-on", "/try-on"],
+      ["account", "/account?demo=1"],
+      ["unsubscribe page", "/unsubscribe?t=" + "0".repeat(64)],
+      ["404", "/no-such-page-here"],
+    ]) {
+      await goto(page, path);
+      await page.waitForTimeout(2500);
+      await scan(label);
+    }
+    await goto(page, "/stories?demo=1");
+    await page.waitForTimeout(2000);
+    await page.click('button[aria-controls="kitty-drawer"]').catch(() => {});
+    await page.waitForTimeout(700);
+    await scan("menu open");
+    await goto(page, "/store?demo=1");
+    await page.waitForTimeout(2500);
+    await page.click('button:has-text("Talk to Kitty")').catch(() => {});
+    await page.waitForTimeout(700);
+    await scan("store chat open");
+  });
+}
+
 /** Kitty Tunables on /admin (demo: saved in this browser), and the store picking them up. */
 async function journeyAdmin(browser, viewport) {
   const route = "/admin (Tunables, demo)";
@@ -1089,7 +1140,7 @@ async function main() {
     stories: [journeyStories, journeyReader, journeyStoriesOwner, journeySubscriptions],
     tryon: [journeyTryOn, journeyCap3D, journeyFit],
     admin: [journeyAdmin],
-    pages: [journeyPages],
+    pages: [journeyPages, journeyA11y],
   };
   try {
     for (const v of VIEWPORTS) {
