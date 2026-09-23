@@ -157,10 +157,14 @@ export default function Chrome({ hideCameraUntilScrolled = false, hideCamera = f
 
   return (
     <>
-      <HomeButton />
-      <MenuButton ref={menuButtonRef} open={drawerOpen} onClick={toggle} />
+      {/* A landmark for the fixed controls, so screen readers can jump to them
+          (they are position: fixed; the nav itself takes no space). */}
+      <nav aria-label="Quick links">
+        <HomeButton />
+        <MenuButton ref={menuButtonRef} open={drawerOpen} onClick={toggle} />
+        {hideCamera ? null : <CameraButton hideUntilScrolled={hideCameraUntilScrolled} />}
+      </nav>
       <Drawer ref={panelRef} open={drawerOpen} onClose={close} />
-      {hideCamera ? null : <CameraButton hideUntilScrolled={hideCameraUntilScrolled} />}
       <Toast />
     </>
   );

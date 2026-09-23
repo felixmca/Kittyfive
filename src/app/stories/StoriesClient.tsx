@@ -461,7 +461,8 @@ function VolumeSection({
 }) {
   const [open, setOpen] = useState(false);
   const date = storyDateText(volume);
-  const headingId = `volume-${volume.slug}`;
+  // The section itself is `volume-<slug>` (the reader links to it); its heading has its own id.
+  const headingId = `volume-${volume.slug}-title`;
   const bodyId = `volume-body-${volume.slug}`;
   const items = useMemo(
     () => volume.chapters.map((c) => ({ ...c, label: c.title || "Untitled chapter" })),
