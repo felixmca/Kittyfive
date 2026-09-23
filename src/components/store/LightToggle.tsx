@@ -4,12 +4,15 @@
  * London (evening from 7pm); this flips it. A 44px glass button under the
  * menu, showing the light you are in: the sun by day, the moon by evening.
  */
+import { useEffect } from "react";
 import { BELOW_CHROME } from "@/components/chrome/layout";
 import { useStoreState } from "./storeState";
 
 export default function LightToggle() {
   const mood = useStoreState((s) => s.lightMood);
   const setMood = useStoreState((s) => s.setLightMood);
+  const initMood = useStoreState((s) => s.initLightMood);
+  useEffect(() => initMood(), [initMood]);
   const evening = mood === "evening";
   return (
     <button

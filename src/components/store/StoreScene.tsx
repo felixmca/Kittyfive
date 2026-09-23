@@ -60,9 +60,12 @@ export default function StoreScene() {
 /** Advances the shared clock and eases day ↔ evening (instantly under reduced motion). */
 function AmbienceClock({ reduced }: { reduced: boolean }) {
   const mood = useStoreState((s) => s.lightMood);
+  const first = useRef(true);
   useEffect(() => {
     ambience.target = mood === "evening" ? 1 : 0;
-    if (reduced) ambience.evening = ambience.target;
+    // The room opens in its light; only a flip of the toggle eases.
+    if (reduced || first.current) ambience.evening = ambience.target;
+    first.current = false;
   }, [mood, reduced]);
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.1);

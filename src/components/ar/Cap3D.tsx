@@ -325,6 +325,9 @@ export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onS
       cancelAnimationFrame(raf);
       built.dispose();
       renderer.dispose();
+      // Give the context back now: Safari allows only a few at a time, and
+      // the camera (and so this canvas) can open and close many times.
+      renderer.forceContextLoss();
       const w = window as CapWindow;
       delete w.__cap3d;
       if (canvasRef && canvasRef.current === canvas) canvasRef.current = null;

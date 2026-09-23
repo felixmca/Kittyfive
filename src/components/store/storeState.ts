@@ -23,6 +23,12 @@ interface StoreSliceState {
   /** Day or evening in the room: London time at first, then the visitor's choice. */
   lightMood: LightMood;
   setLightMood: (mood: LightMood) => void;
+  /**
+   * Set the light from London time, once a visit (after hydration: the server
+   * cannot know the hour, so the first render is always day).
+   */
+  initLightMood: () => void;
+  lightMoodSet: boolean;
   /** What she says while she has wandered off to look at something (null: nothing). */
   poiLine: string | null;
   setPoiLine: (line: string | null) => void;
@@ -41,8 +47,10 @@ export const useStoreState = create<StoreSliceState>((set) => ({
   setArrivedIndex: (arrivedIndex) => set({ arrivedIndex }),
   arrivals: 0,
   noteArrival: (index) => set((s) => ({ arrivedIndex: index, arrivals: s.arrivals + 1 })),
-  lightMood: typeof window === "undefined" ? "day" : moodAtKittys(),
-  setLightMood: (lightMood) => set({ lightMood }),
+  lightMood: "day",
+  setLightMood: (lightMood) => set({ lightMood, lightMoodSet: true }),
+  lightMoodSet: false,
+  initLightMood: () => set((s) => (s.lightMoodSet ? s : { lightMood: moodAtKittys(), lightMoodSet: true })),
   poiLine: null,
   setPoiLine: (poiLine) => set({ poiLine }),
   wanderTo: null,

@@ -8,7 +8,8 @@
  * it had to kill for memory). No IP, no cookies, no identifiers.
  *
  * Sent with navigator.sendBeacon when the page is hidden (at most three times
- * a visit), plus a "stalled" note if the story has not started after 12 s.
+ * a visit), plus a "stalled" note if the story has not started after 12 s on
+ * screen (time in a background tab does not count).
  * Off on local and LAN addresses, under automation (the verify harness), and
  * with NEXT_PUBLIC_STORY_REPORTS=off.
  */
@@ -38,8 +39,10 @@ function wanted(): boolean {
 export class StoryReport {
   private readonly on = wanted();
   private readonly t0 = typeof performance !== "undefined" ? performance.now() : 0;
-  private visibleSince = this.t0;
+  /** When the page last became visible (null: hidden now). */
+  private visibleSince: number | null = null;
   private visibleMs = 0;
+  private stallChecked = false;
   private startMs: number | null = null;
   private splash = false;
   private swipes = 0;
@@ -58,11 +61,24 @@ export class StoryReport {
     } catch {
       /* private mode */
     }
+    if (document.visibilityState !== "hidden") this.visibleSince = this.t0;
     window.addEventListener("error", this.onError);
     window.addEventListener("unhandledrejection", this.onRejection);
     window.addEventListener("pagehide", this.onHide);
     document.addEventListener("visibilitychange", this.onVisibility);
-    this.stallTimer = window.setTimeout(this.checkStalled, STALL_MS);
+    this.armStallCheck();
+  }
+
+  /** Time on screen so far. */
+  private shownMs(): number {
+    return this.visibleMs + (this.visibleSince === null ? 0 : performance.now() - this.visibleSince);
+  }
+
+  /** Check for a stall once the page has been on screen for STALL_MS (not before: a background tab is not a stall). */
+  private armStallCheck(): void {
+    window.clearTimeout(this.stallTimer);
+    if (this.stallChecked || this.visibleSince === null) return;
+    this.stallTimer = window.setTimeout(this.checkStalled, Math.max(0, STALL_MS - this.shownMs()));
   }
 
   /** Where to read the story's state from when a report goes out. */
@@ -101,6 +117,7 @@ export class StoryReport {
     // Back again: the next time it is hidden is worth another summary.
     this.hidden = false;
     this.visibleSince = performance.now();
+    this.armStallCheck();
     try {
       sessionStorage.setItem(MARK, "open");
     } catch {
@@ -114,7 +131,9 @@ export class StoryReport {
   private onHide = (): void => {
     if (this.hidden) return;
     this.hidden = true;
-    this.visibleMs += performance.now() - this.visibleSince;
+    window.clearTimeout(this.stallTimer);
+    if (this.visibleSince !== null) this.visibleMs += performance.now() - this.visibleSince;
+    this.visibleSince = null;
     try {
       sessionStorage.setItem(MARK, "closed");
     } catch {
@@ -124,6 +143,12 @@ export class StoryReport {
   };
 
   private checkStalled = (): void => {
+    if (this.stallChecked || this.visibleSince === null) return;
+    if (this.shownMs() < STALL_MS - 50) {
+      this.armStallCheck();
+      return;
+    }
+    this.stallChecked = true;
     const s = this.state();
     if (!s || !s.started) this.send("stalled");
   };
@@ -155,7 +180,7 @@ export class StoryReport {
       broken: s?.media.broken,
       drawFailed: this.drawFailed,
       crashedBefore: this.crashedBefore,
-      visibleMs: Math.round(this.visibleMs),
+      visibleMs: Math.round(this.shownMs()),
       flushes: this.flushes,
       errors: this.errors,
     };

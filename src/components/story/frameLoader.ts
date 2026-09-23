@@ -246,6 +246,9 @@ function decodeWorkers(): DecodeWorker[] | null {
   return workers.length ? workers : null;
 }
 
+/** A worker that has not answered by then is treated as failed for that frame. */
+const WORKER_TIMEOUT_MS = 4000;
+
 function decodeInWorker(blob: Blob): Promise<ImageBitmap> | null {
   if (workerFailures >= 3) return null;
   const pool = decodeWorkers();
@@ -253,11 +256,28 @@ function decodeInWorker(blob: Blob): Promise<ImageBitmap> | null {
   const entry = pool.reduce((a, b) => (b.busy < a.busy ? b : a));
   const id = ++nextJob;
   return new Promise<ImageBitmap>((resolve, reject) => {
-    workerJobs.set(id, { resolve, reject });
+    // Never wait forever: a silent worker would otherwise hold a decode slot
+    // and stall whatever is waiting for this frame.
+    const timer = setTimeout(() => {
+      if (!workerJobs.has(id)) return;
+      workerJobs.delete(id);
+      reject(new Error("decode worker timed out"));
+    }, WORKER_TIMEOUT_MS);
+    workerJobs.set(id, {
+      resolve: (b) => {
+        clearTimeout(timer);
+        resolve(b);
+      },
+      reject: (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    });
     entry.busy++;
     try {
       entry.worker.postMessage({ id, blob });
     } catch (err) {
+      clearTimeout(timer);
       entry.busy--;
       workerJobs.delete(id);
       reject(err instanceof Error ? err : new Error(String(err)));
@@ -268,21 +288,28 @@ function decodeInWorker(blob: Blob): Promise<ImageBitmap> | null {
 /** Decode compressed bytes into something a canvas can draw (in a worker when the browser allows). */
 export async function decodeFrameBlob(blob: Blob): Promise<FrameImage> {
   const job = decodeInWorker(blob);
+  let workerFailed = false;
   if (job) {
     try {
       return await job;
     } catch {
-      workerFailures++;
+      workerFailed = true;
     }
   }
   if (hasBitmap) {
     try {
-      return await createImageBitmap(blob);
+      const bitmap = await createImageBitmap(blob);
+      // The worker failed where the main thread did not: count it against the
+      // workers. (A frame nobody can decode says nothing about them.)
+      if (workerFailed) workerFailures++;
+      return bitmap;
     } catch {
       // Some browsers reject WebP in createImageBitmap; fall through.
     }
   }
-  return loadViaImage(blob);
+  const img = await loadViaImage(blob);
+  if (workerFailed) workerFailures++;
+  return img;
 }
 
 /** Fetch and decode one frame. Rejects on HTTP errors and aborts. */

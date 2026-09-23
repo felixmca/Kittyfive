@@ -179,10 +179,12 @@ export class SequenceController {
 
   private decode(k: number, blob: Blob): void {
     const signal = this.abort?.signal;
-    this.decoding.add(k);
+    // This session's set: a decode that lands after stop() must not touch the next one's.
+    const decoding = this.decoding;
+    decoding.add(k);
     decodeFrameBlob(blob).then(
       (img) => {
-        this.decoding.delete(k);
+        decoding.delete(k);
         if (!signal || signal.aborted || !this.wanted(k) || this.frames[k]) {
           releaseFrame(img);
         } else {
@@ -203,7 +205,8 @@ export class SequenceController {
         this.pump();
       },
       () => {
-        this.decoding.delete(k);
+        decoding.delete(k);
+        if (!signal || signal.aborted) return;
         this.broken.add(k);
         this.pump();
       },
@@ -330,8 +333,8 @@ export class SequenceController {
     for (const f of this.frames) releaseFrame(f);
     this.frames = [];
     this.blobs = [];
-    this.decoding.clear();
-    this.broken.clear();
+    this.decoding = new Set();
+    this.broken = new Set();
     this.center = 0;
     const keepMissing = this.snap.status === "missing";
     this.setSnap({ ...IDLE, status: keepMissing ? "missing" : "idle" });

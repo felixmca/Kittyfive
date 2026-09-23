@@ -239,7 +239,9 @@ export class SwipeEngine {
     if (!first.clip) return true; // a stand-in needs nothing
     // Slow or stuck: start with anything at all to show; playback waits for each frame.
     const late = performance.now() - this.bootAt > START_ANYWAY_MS;
-    if (this.reduced) return this.media.hasFinal(0) || (late && this.media.decodedPrefix(0) > 0);
+    // Reduced motion shows stills with the captions set: after the grace
+    // period the words alone are better than a splash.
+    if (this.reduced) return this.media.hasFinal(0) || late;
     if (late) return this.media.decodedPrefix(0) > 0 || this.media.hasFinal(0);
     if (!this.chatReady && tl.spans.some((s) => s.enter === "whatsapp")) return false;
     const n = first.clip.frames;

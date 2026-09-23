@@ -84,6 +84,8 @@ interface ChapterFrames {
   clip: ClipInfo;
   /** Compressed bytes, once fetched. */
   blobs: (Blob | null)[];
+  /** Frames with neither bytes nor a broken mark yet (0: nothing left to fetch). */
+  missing: number;
   fetching: Set<number>;
   fetchTries: Uint8Array;
   decoded: Map<number, FrameImage>;
@@ -164,6 +166,7 @@ export class StoryMedia {
             pattern: patterns[i],
             clip,
             blobs: new Array<Blob | null>(clip.frames).fill(null),
+            missing: clip.frames,
             fetching: new Set(),
             fetchTries: new Uint8Array(clip.frames),
             decoded: new Map(),
@@ -260,7 +263,7 @@ export class StoryMedia {
     for (const ch of [chapter, next]) if (ch >= 0 && !order.includes(ch)) order.push(ch);
     for (const ch of order) {
       const c = this.chapters[ch];
-      if (!c) continue;
+      if (!c || !c.missing) continue;
       for (let idx = 0; idx < c.clip.frames; idx++) this.fetchOne(ch, idx);
     }
   }
@@ -291,6 +294,7 @@ export class StoryMedia {
         c.fetching.delete(idx);
         if (this.destroyed) return;
         c.blobs[idx] = blob;
+        c.missing--;
         this.emit();
         this.pump();
       },
@@ -300,6 +304,7 @@ export class StoryMedia {
         c.fetchTries[idx]++;
         if (c.fetchTries[idx] >= FETCH_TRIES) {
           c.broken.add(idx);
+          c.missing--;
           this.emit();
           return;
         }
@@ -352,15 +357,24 @@ export class StoryMedia {
     );
   }
 
-  /** The page went into the background: give the decoded window back (bytes and final frames stay). */
+  /**
+   * The page went into the background: give the decoded window back (bytes
+   * and final frames stay). The frame on screen stays too, so coming back
+   * shows where the story was rather than the nearest thing left (the end of
+   * the chapter) while the window decodes again.
+   */
   suspend(): void {
     if (this.suspended) return;
     this.suspended = true;
-    for (const c of this.chapters) {
-      if (!c) continue;
-      c.decoded.forEach((img) => releaseFrame(img));
-      c.decoded.clear();
-    }
+    const { chapter, pos } = this.focusNow;
+    this.chapters.forEach((c, i) => {
+      if (!c) return;
+      for (const [idx, img] of c.decoded) {
+        if (i === chapter && idx === pos) continue;
+        c.decoded.delete(idx);
+        releaseFrame(img);
+      }
+    });
   }
 
   resume(): void {
