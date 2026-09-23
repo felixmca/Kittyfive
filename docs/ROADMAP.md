@@ -276,7 +276,9 @@ The commerce code is already built and runs in demo mode (see Decisions).
       Kling's own API, fal.ai) behind the same `VideoProvider` interface; credits
       or a paywall, because generation costs real money
 - [ ] Storage quotas, moderation, reporting, privacy (unlisted/private pets)
-- [ ] Self-hosting guide: Supabase project + migrations + Vercel in ten minutes
+- [x] Self-hosting guide: Supabase project + migrations + Vercel
+      ([SELF-HOSTING.md](SELF-HOSTING.md), 23 Sep; one pet per site until
+      onboarding lands)
 
 ## Phase 8 · Stores for everyone (£19/month)
 

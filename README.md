@@ -49,14 +49,15 @@ policies have their own check: `node scripts/db.mjs supabase/tests/rls-smoke.sql
 
 ## Configuration
 
-Copy `.env.example` to `.env.local`. For your own copy:
+The full guide to running your own copy is [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md).
+In short, copy `.env.example` to `.env.local`, then:
 
 1. Create a Supabase project; apply `supabase/migrations/*` in order; optionally
    run `supabase/seed/kitty.sql` (or your own pet's version of it).
 2. Add yourself as an admin in the SQL editor:
    `insert into public.admins (email) values ('you@example.com');`
-3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the
-   publishable key) and, for chat and chapter drafts, `ANTHROPIC_API_KEY`.
+3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and,
+   for chat and chapter drafts, `ANTHROPIC_API_KEY`.
 4. In Supabase → Authentication → URL Configuration, set your site URL and
    allow `https://<your-site>/**` as a redirect.
 
