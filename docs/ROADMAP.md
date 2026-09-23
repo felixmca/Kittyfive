@@ -257,6 +257,8 @@ live, sending answers 503 until `RESEND_API_KEY` + `EMAIL_FROM` are set.)*
       already suppresses hard bounces itself in the meantime)
 - [ ] First real send once the domain and Resend are set up (then invite
       yourself from /stories and email a chapter)
+- [ ] A privacy page before the first email: the facts are drafted in
+      [PRIVACY-DRAFT.md](PRIVACY-DRAFT.md) for Felix to check and fill in
 
 ## Phase 6 · Kitty's store takes real money
 

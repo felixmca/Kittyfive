@@ -52,6 +52,9 @@ error), and the next session can read yours (§2 below).
   verify it in Resend and put `RESEND_API_KEY` and `EMAIL_FROM` on Vercel;
   story emails (and order emails) then switch on by themselves. The same
   domain lets Supabase send sign-up emails through Resend (Roadmap 5).
+  Before the first email, a privacy page: I drafted what the site keeps and
+  why in [PRIVACY-DRAFT.md](PRIVACY-DRAFT.md) (not published; it has
+  [brackets] only you can fill in).
 
 **Choices I made (say if you want them different):**
 - The floating camera button is gone from the landing, the store, checkout
