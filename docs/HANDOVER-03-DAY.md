@@ -277,6 +277,11 @@ frame and holds 60 fps here. On a phone that cannot keep up it now draws
 fewer pixels (from 1.75× down to 1×) instead of stuttering. It still needs a
 look on a real iPhone, and again when the Blender house arrives.
 
+When Kitty wanders off on her own, the camera now turns to follow her as she
+walks (it used to look at where she was going and wait). When you change
+product it still goes straight to the product, which is what a shopper wants
+to see; following her there pointed the camera at the floor.
+
 ### 12 · Phase 4: the hoodie and long-sleeve fitted to you (behind a switch)
 
 Open **`/try-on?fit=1`**, allow the camera and pick the hoodie or the

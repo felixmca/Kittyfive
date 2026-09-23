@@ -61,3 +61,11 @@ export function selectedVariant(product: Product, variants: Record<string, strin
   const id = variants[product.id];
   return product.variants.find((v) => v.id === id) ?? product.variants[0];
 }
+
+/**
+ * Where Kitty is on the floor, written by <Kitty/> every frame and read by the
+ * camera, which turns to follow her while she strolls off on her own (to the
+ * window, the garden door, the rug). A plain object, not state: it changes
+ * every frame and nothing re-renders from it.
+ */
+export const kittyTrack = { x: 0, z: 0, strolling: false };

@@ -26,7 +26,7 @@ import SpeechBubble from "./SpeechBubble";
 import { useAssetExists } from "./useAssetExists";
 import { angleDelta, createMotion, prefersReducedMotion, type KittyMotion } from "./motion";
 import { POINTS_OF_INTEREST, SPOTS, TURN_SPEED, WALK_SPEED, spotFor, type Vec3 } from "./spots";
-import { useStoreState } from "./storeState";
+import { kittyTrack, useStoreState } from "./storeState";
 
 const KITTY_GLB = "/models/kitty.glb";
 
@@ -192,6 +192,10 @@ export default function Kitty() {
     }
 
     g.position.copy(w.pos);
+    kittyTrack.x = w.pos.x;
+    kittyTrack.z = w.pos.z;
+    // Walking to a product, the camera goes ahead to the product instead.
+    kittyTrack.strolling = w.mode === "walking" && w.poi >= 0;
     if (w.mode === "walking" && w.hop > 0 && w.totalDist > 0) {
       const u = THREE.MathUtils.clamp(w.start.distanceTo(w.pos) / w.totalDist, 0, 1);
       g.position.y += 4 * w.hop * u * (1 - u);

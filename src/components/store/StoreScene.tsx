@@ -21,7 +21,7 @@ import SceneErrorBoundary from "./SceneErrorBoundary";
 import ScenePlaceholder from "./ScenePlaceholder";
 import { useReducedMotion } from "./motion";
 import { DOORWAY_CAMERA, spotFor } from "./spots";
-import { useStoreState } from "./storeState";
+import { kittyTrack, useStoreState } from "./storeState";
 
 const BG = "#0b0b0c";
 /** Sharpest the room is drawn (device pixels per CSS pixel), and the floor it may drop to. */
@@ -211,6 +211,10 @@ function Lights() {
 
 /** After the visitor moves the view themselves, leave it alone this long (ms). */
 const HANDS_OFF_MS = 20_000;
+/** While Kitty strolls off, how far the camera's gaze leans from where she is heading towards her. */
+const FOLLOW = 0.55;
+/** Her middle, above the floor, for the camera to look at. */
+const KITTY_HEIGHT = 0.3;
 
 function CameraRig({ reduced }: { reduced: boolean }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
@@ -218,7 +222,16 @@ function CameraRig({ reduced }: { reduced: boolean }) {
   const size = useThree((s) => s.size);
   const productIndex = useUi((s) => s.productIndex);
   const wanderTo = useStoreState((s) => s.wanderTo);
-  const anim = useRef({ active: false, pos: new THREE.Vector3(), look: new THREE.Vector3(), touchedAt: -Infinity });
+  const anim = useRef({
+    active: false,
+    pos: new THREE.Vector3(),
+    /** Where the camera settles its gaze (the product, or where she has wandered). */
+    goal: new THREE.Vector3(),
+    /** Where it looks this frame: the goal, leaning towards Kitty while she walks. */
+    look: new THREE.Vector3(),
+    kitty: new THREE.Vector3(),
+    touchedAt: -Infinity,
+  });
 
   // Portrait phones get a wider vertical field of view so Kitty and the
   // product both fit; desktop keeps a natural 50.
@@ -242,7 +255,8 @@ function CameraRig({ reduced }: { reduced: boolean }) {
     const spot = spotFor(productIndex);
     const a = anim.current;
     a.pos.set(...spot.camera);
-    a.look.set(...spot.look);
+    a.goal.set(...spot.look);
+    a.look.copy(a.goal);
     if (reduced) {
       camera.position.copy(a.pos);
       const c = controls.current;
@@ -264,10 +278,10 @@ function CameraRig({ reduced }: { reduced: boolean }) {
     if (reduced || performance.now() - a.touchedAt < HANDS_OFF_MS) return;
     const spot = spotFor(useUi.getState().productIndex);
     a.pos.copy(camera.position);
-    if (wanderTo) a.look.set(wanderTo[0], 0.35, wanderTo[2]);
+    if (wanderTo) a.goal.set(wanderTo[0], 0.35, wanderTo[2]);
     else {
       a.pos.set(...spot.camera);
-      a.look.set(...spot.look);
+      a.goal.set(...spot.look);
     }
     a.active = true;
   }, [wanderTo, reduced, camera]);
@@ -275,11 +289,23 @@ function CameraRig({ reduced }: { reduced: boolean }) {
   useFrame((_, rawDt) => {
     const a = anim.current;
     const c = controls.current;
-    if (!a.active || !c) return;
+    if (!c) return;
+    // Follow her with the eyes while she strolls off (the camera stays put and
+    // turns; never under reduced motion, nor while the visitor is steering or
+    // has just been).
+    const following = !reduced && kittyTrack.strolling && performance.now() - a.touchedAt >= HANDS_OFF_MS;
+    if (following) {
+      a.kitty.set(kittyTrack.x, KITTY_HEIGHT, kittyTrack.z);
+      a.look.copy(a.goal).lerp(a.kitty, FOLLOW);
+      a.active = true;
+    } else if (a.active) {
+      a.look.copy(a.goal);
+    }
+    if (!a.active) return;
     const k = 1 - Math.exp(-Math.min(rawDt, 0.1) * 2.2);
     camera.position.lerp(a.pos, k);
     c.target.lerp(a.look, k);
-    if (camera.position.distanceToSquared(a.pos) < 1e-4 && c.target.distanceToSquared(a.look) < 1e-4) {
+    if (!following && camera.position.distanceToSquared(a.pos) < 1e-4 && c.target.distanceToSquared(a.look) < 1e-4) {
       a.active = false;
     }
   });

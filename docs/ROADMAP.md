@@ -184,8 +184,8 @@ to render on phones and easier to make charming.
       the river window and the garden beyond a glass door with Kitty's cat flap
       are animated shaders and swaying plants; day/evening follows London time
       with a sun/moon toggle; left alone, Kitty wanders to the window, the
-      garden door and the rug, says a line and comes back. Still to do: the
-      camera following her, and all of it on the Blender house)*
+      garden door and the rug, says a line and comes back, and the camera
+      turns to follow her there. Still to do: all of it on the Blender house)*
 - [x] Products at spots in the house; product panel and Buy (demo checkout);
       "Try it on" in the panel (re-place the spots once the Blender house exists)
 - [x] Chat with Kitty on the real API key; **Kitty Tunables** on `/admin`
