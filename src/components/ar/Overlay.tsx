@@ -118,10 +118,16 @@ export default function Overlay({
         pose = mapPose(lm, video.videoWidth, video.videoHeight, cw, ch, mirrored);
       }
       if (personRef && pose && pose.leftShoulder.v > 0.5 && pose.rightShoulder.v > 0.5) {
+        const la = pose.leftAnkle;
+        const ra = pose.rightAnkle;
+        const feet = [la, ra].filter((p) => p && p.v > 0.5 && p.y <= ch).map((p) => p!.y);
         personRef.current = {
           x: (pose.leftShoulder.x + pose.rightShoulder.x) / 2,
           shoulderW: Math.abs(pose.leftShoulder.x - pose.rightShoulder.x),
           at: performance.now(),
+          // The floor is a little below the ankles (the soles).
+          floorY: feet.length ? Math.max(...feet) + Math.abs(pose.leftShoulder.x - pose.rightShoulder.x) * 0.12 : undefined,
+          viewH: ch,
         };
       }
 

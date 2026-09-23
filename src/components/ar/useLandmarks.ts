@@ -19,7 +19,7 @@
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { FilesetResolver, MPMask, NormalizedLandmark, PoseLandmarker } from "@mediapipe/tasks-vision";
-import { ARM_INDEX, ARM_KEYS, LANDMARK_KEYS, POSE_INDEX, type Landmarks, type LmPoint } from "./landmarks";
+import { LANDMARK_KEYS, LIMB_INDEX, LIMB_KEYS, POSE_INDEX, type Landmarks, type LmPoint } from "./landmarks";
 
 export type TrackingStatus = "idle" | "loading" | "ready" | "unavailable";
 
@@ -39,10 +39,10 @@ const FAST_FRAME_MS = 24;
 const MISSES_BEFORE_LOST = 8;
 const ERRORS_BEFORE_GIVE_UP = 6;
 
-/** Every landmark the tracker keeps: the body's, then the arms'. */
+/** Every landmark the tracker keeps: the body's, then the arms' and ankles'. */
 const TRACKED: [string, number][] = [
   ...LANDMARK_KEYS.map((k): [string, number] => [k, POSE_INDEX[k]]),
-  ...ARM_KEYS.map((k): [string, number] => [k, ARM_INDEX[k]]),
+  ...LIMB_KEYS.map((k): [string, number] => [k, LIMB_INDEX[k]]),
 ];
 
 type Fileset = Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>;

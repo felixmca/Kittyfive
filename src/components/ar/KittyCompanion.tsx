@@ -83,6 +83,9 @@ interface CatState {
   sit: number; // 0 standing … 1 sitting, eased
   /** Which side of the person she keeps to (−1 left, +1 right), once chosen. */
   side: number;
+  /** Her floor (canvas y, up from the centre) and height (px), eased towards the person's. */
+  floor: number;
+  px: number;
 }
 
 function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<PersonSpot | null> }) {
@@ -108,6 +111,8 @@ function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<P
     blinkUntil: 0,
     sit: reduced ? 1 : 0,
     side: 0,
+    floor: Number.NaN,
+    px: Number.NaN,
   });
 
   const mats = useMemo(
@@ -144,8 +149,28 @@ function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<P
     const now = state.clock.elapsedTime;
     const dt = Math.min(delta, 0.05);
 
-    const scale = Math.min(CAT_PX, size.height * 0.42) / UNIT_HEIGHT;
-    const floorY = -size.height / 2 + 14;
+    // Her own floor and size: the bottom of the frame, CAT_PX tall. With the
+    // person's feet in the picture she sits on their floor instead, as tall
+    // as a cat is next to them (about 0.6 of their shoulder width), easing
+    // there so tracking jitter does not make her hop.
+    const person0 = personRef?.current;
+    const onFloor = !reduced && person0 && performance.now() - person0.at < PERSON_STALE_MS && person0.floorY !== undefined && person0.viewH ? person0 : null;
+    const baseFloor = -size.height / 2 + 14;
+    const basePx = Math.min(CAT_PX, size.height * 0.42);
+    let wantPx = basePx;
+    let wantFloor = baseFloor;
+    if (onFloor) {
+      wantPx = Math.max(48, Math.min(basePx, onFloor.shoulderW * 0.6));
+      // The container's y → this canvas (anchored to the container's bottom), y up from the centre.
+      const canvasTop = onFloor.viewH! - size.height;
+      const y = size.height / 2 - (onFloor.floorY! - canvasTop);
+      wantFloor = Math.max(baseFloor, Math.min(size.height / 2 - wantPx, y));
+    }
+    const ease = Math.min(1, dt * 3);
+    s.floor = Number.isNaN(s.floor) ? wantFloor : s.floor + (wantFloor - s.floor) * ease;
+    s.px = Number.isNaN(s.px) ? wantPx : s.px + (wantPx - s.px) * ease;
+    const scale = s.px / UNIT_HEIGHT;
+    const floorY = s.floor;
     const halfW = Math.max(0, size.width / 2 - scale * 0.8);
 
     if (s.until === 0) s.until = now + 5 + Math.random() * 5;

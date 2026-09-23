@@ -20,10 +20,20 @@ export const LANDMARK_KEYS = [
 
 export type LandmarkKey = (typeof LANDMARK_KEYS)[number];
 
-/** The arms, for garments fitted to the body (sleeves follow them). Optional everywhere. */
-export const ARM_KEYS = ["leftElbow", "rightElbow", "leftWrist", "rightWrist"] as const;
-export type ArmKey = (typeof ARM_KEYS)[number];
-export const ARM_INDEX: Record<ArmKey, number> = { leftElbow: 13, rightElbow: 14, leftWrist: 15, rightWrist: 16 };
+/**
+ * Arms (fitted garments' sleeves follow them) and ankles (where your floor is,
+ * for Kitty to sit on it). Optional everywhere.
+ */
+export const LIMB_KEYS = ["leftElbow", "rightElbow", "leftWrist", "rightWrist", "leftAnkle", "rightAnkle"] as const;
+export type LimbKey = (typeof LIMB_KEYS)[number];
+export const LIMB_INDEX: Record<LimbKey, number> = {
+  leftElbow: 13,
+  rightElbow: 14,
+  leftWrist: 15,
+  rightWrist: 16,
+  leftAnkle: 27,
+  rightAnkle: 28,
+};
 
 /** MediaPipe Pose (BlazePose 33-point topology) indices for the points we use. */
 export const POSE_INDEX: Record<LandmarkKey, number> = {
@@ -45,7 +55,7 @@ export interface LmPoint {
   visibility: number;
 }
 
-export type Landmarks = Record<LandmarkKey, LmPoint> & Partial<Record<ArmKey, LmPoint>>;
+export type Landmarks = Record<LandmarkKey, LmPoint> & Partial<Record<LimbKey, LmPoint>>;
 
 /** A landmark in CSS pixels of the try-on container, `v` = visibility. */
 export interface Pt {
@@ -54,7 +64,7 @@ export interface Pt {
   v: number;
 }
 
-export type ScreenPose = Record<LandmarkKey, Pt> & Partial<Record<ArmKey, Pt>>;
+export type ScreenPose = Record<LandmarkKey, Pt> & Partial<Record<LimbKey, Pt>>;
 
 /**
  * Where the person is across the try-on, for Kitty to sit beside them:
@@ -66,6 +76,10 @@ export interface PersonSpot {
   x: number;
   shoulderW: number;
   at: number;
+  /** Where their feet are (container y, px) when the ankles are in the picture: Kitty sits on that floor. */
+  floorY?: number;
+  /** The container's height (px), to place that floor in Kitty's own canvas. */
+  viewH?: number;
 }
 
 /**
@@ -89,7 +103,7 @@ export function mapPose(
   const ox = (cw - dw) / 2;
   const oy = (ch - dh) / 2;
   const out: Partial<ScreenPose> = {};
-  for (const key of [...LANDMARK_KEYS, ...ARM_KEYS]) {
+  for (const key of [...LANDMARK_KEYS, ...LIMB_KEYS]) {
     const p = lm[key];
     if (!p) continue;
     const nx = mirrored ? 1 - p.x : p.x;
