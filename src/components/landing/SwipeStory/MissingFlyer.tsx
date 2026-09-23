@@ -13,7 +13,9 @@ export default function MissingFlyer() {
   useEffect(() => {
     let live = true;
     // HEAD first, so a missing flyer is not a failed image load in the console.
-    fetch(FLYER_SRC, { method: "HEAD" })
+    // no-cache: until 23 Sep 2026 a 404 here was sent as "immutable for a
+    // year", so a browser that asked before the flyer existed must ask again.
+    fetch(FLYER_SRC, { method: "HEAD", cache: "no-cache" })
       .then((res) => {
         const type = res.headers.get("content-type") ?? "";
         if (live && res.ok && type.startsWith("image/")) setReal(true);
