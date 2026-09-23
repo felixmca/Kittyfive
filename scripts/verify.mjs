@@ -1050,6 +1050,8 @@ async function apiChecks() {
   record(viewport, "/api/webhooks/resend", "an unsigned bounce changes nothing (503 until set up, then 401)", bounce.status === 503 || bounce.status === 401, String(bounce.status));
   const stop = await fetch(`${BASE}/api/subscriptions/unsubscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "nope" }) });
   record(viewport, "/api/subscriptions/unsubscribe", "a malformed token is refused", stop.status === 400, String(stop.status));
+  const missing = await get("/no-such-page-here");
+  record(viewport, "/no-such-page-here", "a missing page is a 404 in Kitty's words, with the ways back", missing.status === 404 && /Kitty looked everywhere/.test(missing.text) && /href="\/stories"/.test(missing.text), String(missing.status));
   const manifest = await get("/manifest.webmanifest");
   record(viewport, "/manifest.webmanifest", "home-screen app manifest with Kitty's icons", manifest.status === 200 && /"icon-512\.png"|icon-512\.png/.test(manifest.text) && /<link rel="manifest"/.test(home.text), String(manifest.status));
 }
