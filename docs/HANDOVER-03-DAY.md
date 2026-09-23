@@ -401,5 +401,7 @@ send is used up for nothing.
   only you can fill in.
 
 On a slow 3G connection (emulated) the landing's story starts after about
-16 s behind the Kittyfive splash; that time is the page's own scripts
-arriving, not the story. On 4G it starts in about 3.5 s.
+18 s behind the Kittyfive splash, mostly the page's own scripts arriving;
+it used to start at 16 s but on the *end* of chapter 1 (the only picture
+that had arrived), then jump back. It now opens on the first frame. On 4G
+it starts in about 3.5 s.
