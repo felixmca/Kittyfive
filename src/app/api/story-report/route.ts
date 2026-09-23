@@ -78,6 +78,10 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(null, { status: 400 });
   }
   const report = clean(body.report as Record<string, unknown>);
+  // Test browsers are not visitors (the client already stays quiet under
+  // automation; this catches a harness that hides that).
+  const ua = String(report.ua ?? "") + " " + (req.headers.get("user-agent") ?? "");
+  if (/HeadlessChrome|Playwright|PhantomJS|Puppeteer/i.test(ua)) return new Response(null, { status: 204 });
   const sb = serverSupabase();
   if (!sb) return new Response(null, { status: 204 }); // demo mode: nowhere to keep it
   const { error } = await sb.rpc("report_story", { kind, report });
