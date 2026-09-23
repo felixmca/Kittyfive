@@ -144,13 +144,24 @@ export async function canSendEmail(): Promise<boolean> {
   }
 }
 
-async function post(path: string, body: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+async function post(path: string, body: unknown, timeoutMs: number): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const token = await accessToken();
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify(body),
-  });
+  // No answer in time (a weak signal): a plain failure the panel can report.
+  const ac = new AbortController();
+  const timer = window.setTimeout(() => ac.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+  } catch {
+    return { ok: false, data: { message: "No answer. Check your connection and try again." } };
+  } finally {
+    window.clearTimeout(timer);
+  }
   let data: Record<string, unknown> = {};
   try {
     data = (await res.json()) as Record<string, unknown>;
@@ -171,7 +182,7 @@ export async function invite(petId: string, email: string): Promise<SendResult> 
     demoUpsert(petId, clean, {}, "invite");
     return { ok: true, demo: true, message: `Invitation ready for ${clean} (demo: nothing was sent).` };
   }
-  const { ok, data } = await post("/api/subscriptions/invite", { petId, email: clean });
+  const { ok, data } = await post("/api/subscriptions/invite", { petId, email: clean }, 20_000);
   if (!ok) return { ok: false, message: String(data.message ?? "That didn't work.") };
   const status = data.status as SubStatus;
   if (status === "active") return { ok: true, message: "Already subscribed." };
@@ -188,7 +199,8 @@ export async function notifyChapter(petId: string, chapterId: string): Promise<S
     demoWrite(s);
     return { ok: true, demo: true, message: `Would email ${n} ${n === 1 ? "subscriber" : "subscribers"} (demo: nothing was sent).` };
   }
-  const { ok, data } = await post("/api/subscriptions/notify", { chapterId });
+  // The route may take up to its 60 s limit for a long list.
+  const { ok, data } = await post("/api/subscriptions/notify", { chapterId }, 70_000);
   if (!ok) return { ok: false, message: String(data.message ?? "That didn't work.") };
   const n = Number(data.recipients ?? 0);
   const sent = Number(data.sent ?? 0);
