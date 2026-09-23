@@ -852,6 +852,15 @@ async function apiChecks() {
   record(viewport, "/api/checkout", "rejects unknown variant", bad.status === 400, String(bad.status));
   const hook = await fetch(`${BASE}/api/webhooks/stripe`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } });
   record(viewport, "/api/webhooks/stripe", "unsigned body is not accepted as a paid event", hook.status === 400 || hook.status === 200, String(hook.status));
+
+  // The link preview and the home-screen app: tags present, files served, small enough for WhatsApp.
+  const home = await get("/");
+  const og = /<meta property="og:image" content="[^"]*\/opengraph-image\.jpg/.test(home.text);
+  const card = await fetch(`${BASE}/opengraph-image.jpg`);
+  const size = Number(card.headers.get("content-length") ?? (await card.arrayBuffer()).byteLength);
+  record(viewport, "/", "share card: og:image tag and a JPEG under 300 KB", og && card.status === 200 && size > 10_000 && size < 300_000, `${card.status}, ${Math.round(size / 1024)} KB`);
+  const manifest = await get("/manifest.webmanifest");
+  record(viewport, "/manifest.webmanifest", "home-screen app manifest with Kitty's icons", manifest.status === 200 && /"icon-512\.png"|icon-512\.png/.test(manifest.text) && /<link rel="manifest"/.test(home.text), String(manifest.status));
 }
 
 async function main() {

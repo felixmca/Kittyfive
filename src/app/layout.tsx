@@ -11,7 +11,6 @@ export const metadata: Metadata = {
     description: SITE.tagline,
     url: SITE.url,
     siteName: SITE.name,
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Kitty" }],
     locale: "en_GB",
     type: "website",
   },
