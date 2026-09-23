@@ -15,18 +15,25 @@ export default function SnackButton({ className = "" }: { className?: string }) 
   async function giveSnack() {
     if (busy) return;
     setBusy(true);
+    // No answer in 20 s (a weak signal): say so rather than spin for ever.
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 20_000);
     try {
       const res = await fetch("/api/snack", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
+        signal: ac.signal,
       });
       const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (!res.ok || !json.url) throw new Error(json.error || "Could not open the snack tin.");
       window.location.assign(json.url);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Something went wrong.");
+      const timedOut = err instanceof Error && err.name === "AbortError";
+      showToast(timedOut ? "The snack tin did not answer. Try again in a moment." : err instanceof Error ? err.message : "Something went wrong.");
       setBusy(false);
+    } finally {
+      window.clearTimeout(timer);
     }
   }
 

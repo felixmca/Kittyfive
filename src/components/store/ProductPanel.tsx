@@ -81,11 +81,15 @@ export default function ProductPanel() {
   async function buy() {
     if (!variant || buying) return;
     setBuying(true);
+    // No answer in 20 s (a weak signal): say so rather than spin for ever.
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 20_000);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ variantId: variant.id, quantity: 1 }),
+        signal: ac.signal,
       });
       let data: { url?: unknown; error?: unknown } = {};
       try {
@@ -105,6 +109,7 @@ export default function ProductPanel() {
     } catch {
       showToast("Checkout is having a nap. Try again in a moment.");
     } finally {
+      window.clearTimeout(timer);
       setBuying(false);
     }
   }
