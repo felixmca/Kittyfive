@@ -31,6 +31,7 @@ in [`docs/screenshots/day-23/`](screenshots/day-23/).
    stand back so your arms are in the picture, and pick the hoodie or the
    long-sleeve. The sleeves should follow your arms (§12). Stand further
    back, feet in the picture, and Kitty sits on the floor next to you.
+   Both at once: `https://kittyfive.vercel.app/try-on?cap3d=1&fit=1`.
 6. **New chapters by email** (§13): at the bottom of `/stories` there is a
    card to subscribe, and signed in you have a panel for invitations and
    "Email it". It is all built and tested, but nothing sends until the site
