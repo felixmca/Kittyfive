@@ -167,25 +167,37 @@ living room and garden (think soft low-poly with toon shading), which is cheaper
 to render on phones and easier to make charming.
 
 **Felix** (the shot list: [Handover 04](HANDOVER-04-STORE-PHOTOS.md))
-- [ ] Reference photos into `assets-raw/room/`: each corner of the living room,
+- [x] Reference photos into `assets-raw/room/`: each corner of the living room,
       the window and river view, the sofa, the kitchen counter, the garden from
-      the door and from the far end, anything Kitty loves
+      the door and from the far end, anything Kitty loves *(23 Sep: nine photos
+      at dusk, living room and garden, filed by [Handover 05](HANDOVER-05-EVENING.md);
+      a daytime one from the gate would let the far bank by day be a photo too)*
 - [ ] Rough room and garden measurements
 - [ ] Kitty's markings (`assets-raw/kitty-identity/`) and a turntable video
       (`assets-raw/turntable/`)
 
 **Code**
-- [ ] Room + garden modelled in Blender (MCP) from the photos: stylised palette,
-      baked lighting, one draw-call budget per zone, GLB with Draco/KTX2
-- [ ] Kitty: Quaternius CC0 cat retextured as a tuxedo from `kitty-identity/`,
-      Walk / Idle / Sit / Jump clips
+- [x] Room + garden modelled in Blender from the photos: stylised palette,
+      one draw-call budget per zone, GLB with Draco *(23 Sep evening:
+      `scripts/store/room.py`, run headless, from `layout.json` (which the site
+      shares); pictures lifted from the photos, flat colours as vertex colours:
+      27 draw calls, 37k triangles, 600 KB. Lighting is real-time day/evening,
+      not baked. The Thames is Felix's dusk photo from the gate on a painted
+      backcloth)*
+- [x] Kitty: a 3D tuxedo cat with her markings, Walk / Idle clips *(23 Sep:
+      built by `scripts/store/kitty.py` rather than retexturing the Quaternius
+      cat (no download needed, markings exact): rigged, 9k triangles, head
+      turns to the visitor; she jumps onto the ottoman in code. Sit and Jump
+      clips still to add)*
 - [ ] The tour: Kitty walks sofa → window → counter → garden; camera follows;
       river and plants animate; day/evening light *(23 Sep, on the drawn room:
       the river window and the garden beyond a glass door with Kitty's cat flap
       are animated shaders and swaying plants; day/evening follows London time
       with a sun/moon toggle; left alone, Kitty wanders to the window, the
       garden door and the rug, says a line and comes back, and the camera
-      turns to follow her there. Still to do: all of it on the Blender house)*
+      turns to follow her there. 23 Sep evening: all of it on the Blender
+      house; she walks round the furniture (`paths.ts`) and her stops are the
+      patio door, her cat tree and the rug)*
 - [x] Products at spots in the house; product panel and Buy (demo checkout);
       "Try it on" in the panel (re-place the spots once the Blender house exists)
 - [x] Chat with Kitty on the real API key; **Kitty Tunables** on `/admin`
@@ -198,8 +210,8 @@ to render on phones and easier to make charming.
       emulated 4G, 2.3 s with the CPU slowed 4×; 98 draw calls, 15k
       triangles, 60 fps on this PC. The resolution now drops from 1.75× towards
       1× when frames run slow (drei PerformanceMonitor). `window.__storePerf()`
-      reports it all. Still to measure on a real iPhone 12, and again once the
-      Blender house replaces the drawn room)*
+      reports it all. The Blender house is 27 draw calls, 37k triangles, plus
+      Kitty and the product; still to measure on a real iPhone)*
 
 ## Phase 4 · A more realistic try-on
 

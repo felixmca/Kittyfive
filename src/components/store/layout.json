@@ -1,5 +1,5 @@
 {
-  "_about": "The living room and garden at Kitty's (Pacific Wharf), from Felix's photos of 23 Sep 2026. Metres; y up; the visitor stands at +z (the dining end) looking towards -z (the patio door). Read by the site (spots.ts, Kitty's paths) and by the Blender build (scripts/room/room.py), so the room and where Kitty walks always agree.",
+  "_about": "The living room and garden at Kitty's (Pacific Wharf), from Felix's photos of 23 Sep 2026. Metres; y up; the visitor stands at +z (the dining end) looking towards -z (the patio door). Read by the site (spots.ts, Kitty's paths) and by the Blender build (scripts/store/room.py), so the room and where Kitty walks always agree.",
   "room": { "left": -2.1, "right": 2.1, "back": -3.2, "front": 3.4, "height": 2.5 },
   "patioDoor": { "x0": -1.95, "x1": -0.55, "height": 2.1, "openFrom": -1.25 },
   "camera": { "position": [0.25, 1.5, 3], "look": [0.1, 0.7, -0.85] },

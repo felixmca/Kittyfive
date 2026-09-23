@@ -18,7 +18,10 @@ ui/whatsapp/                   the neighbours' chat, BLURRED (original/ is never
 kitty-identity/                optional: 4–8 photos of her markings
 turntable/                     optional: a 10–20 s video circling her
 products/                      artwork for the merch (Phase 2 of commerce)
-room/                          living room + garden reference (Phase 3)
+room/                          living room + garden reference (Phase 3); room/build/ is made from it
+tryon/                         photos or videos of you, to fit the try-on to a real person (Phase 4)
+feedback/                      screenshots of things to fix, one folder per day
+merch/build/                   made by scripts/store/merch-textures.mjs
 ```
 
 Chapters: `01-a-cold-night`, `02-five-by-dawn`, `03-missing-found`, `04-riverside-sofa`.

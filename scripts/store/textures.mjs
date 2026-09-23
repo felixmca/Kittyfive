@@ -1,7 +1,7 @@
 // Textures for the store's living room, garden and river, from Felix's
 // photos (assets-raw/room, never committed) and from code.
 //
-//   node scripts/room/textures.mjs
+//   node scripts/store/textures.mjs
 //
 // Writes:
 //   assets-raw/room/build/*.png      what the Blender build (room.py) paints on:

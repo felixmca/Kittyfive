@@ -26,7 +26,7 @@ export interface Product {
   variants: ProductVariant[];
   /** Flat 2D mockups for the store cards + AR try-on. */
   images: { front: string; back?: string; detail?: string };
-  /** Optional GLB for the floating 3D preview in the living room. */
+  /** The 3D model (scripts/store/merch.py) for the living room; its "Fabric" takes the variant's colour. */
   model?: string;
   /** Where the merch sits on a person in AR. */
   anchor: "head" | "torso";
@@ -46,6 +46,7 @@ export const PRODUCTS: Product[] = [
       { id: "cap-stone", label: "Stone", colour: "#cfc6b8" },
     ],
     images: { front: "/products/cap-front.png" },
+    model: "/models/merch-cap.glb",
     anchor: "head",
   },
   {
@@ -63,6 +64,7 @@ export const PRODUCTS: Product[] = [
       { id: "hoodie-black-xl", label: "Black / XL", colour: "#111111", size: "XL" },
     ],
     images: { front: "/products/hoodie-front.png", back: "/products/hoodie-back.png" },
+    model: "/models/merch-hoodie.glb",
     anchor: "torso",
   },
   {
@@ -84,6 +86,7 @@ export const PRODUCTS: Product[] = [
       front: "/products/longsleeve-front.png",
       back: "/products/longsleeve-back.png",
     },
+    model: "/models/merch-longsleeve.glb",
     anchor: "torso",
   },
 ];

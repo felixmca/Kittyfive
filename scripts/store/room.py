@@ -1,8 +1,8 @@
 """
 Kitty's living room and garden (Pacific Wharf) as one GLB for the store.
 
-    node scripts/room/textures.mjs            # textures from Felix's photos first
-    node scripts/room/blender.mjs scripts/room/room.py
+    node scripts/store/textures.mjs            # textures from Felix's photos first
+    node scripts/store/blender.mjs scripts/store/room.py
 
 Built from src/components/store/layout.json (the same numbers the site uses
 for Kitty's spots and paths) and the textures in assets-raw/room/build, in a

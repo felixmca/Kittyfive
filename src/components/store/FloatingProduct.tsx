@@ -2,13 +2,15 @@
 /**
  * The current product floating beside Kitty: slow spin, gentle bob, a soft
  * additive glow on the surface below, and a tap that opens the product panel.
- * Procedural cap / hoodie / long-sleeve by default; if product.images.front
- * exists it is mapped onto a front-facing plane instead (inside an error
- * boundary that falls back to the procedural version).
+ *
+ * The product is its 3D model (product.model, made by scripts/store/merch.py)
+ * with its cloth in the chosen colour; while that loads, or if it cannot, a
+ * simpler drawn version stands in (and a flat mockup image, if one exists,
+ * is preferred to the drawn one).
  */
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { RoundedBox, useTexture } from "@react-three/drei";
+import { RoundedBox, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { PRODUCTS, type Product } from "@/config/products";
 import { useUi } from "@/lib/store";
@@ -32,7 +34,10 @@ export default function FloatingProduct() {
   const product = PRODUCTS[index];
   const spot = spotFor(index);
   const variant = selectedVariant(product, variants);
+  const hasModel = useAssetExists(product.model ?? null);
   const hasImage = useAssetExists(product.images.front);
+  // Flat mockups sway rather than spin; models and drawn products spin.
+  const flat = hasModel !== true && hasImage === true;
 
   const floater = useRef<THREE.Group>(null);
   const glow = useRef<THREE.Mesh>(null);
@@ -58,8 +63,8 @@ export default function FloatingProduct() {
     const bob = reduced ? 0 : Math.sin(t * 1.3) * 0.03;
     g.position.set(spot.product[0], spot.product[1] + bob, spot.product[2]);
     if (reduced) {
-      g.rotation.y = hasImage === true ? 0 : 0.35;
-    } else if (hasImage === true) {
+      g.rotation.y = flat ? 0 : 0.35;
+    } else if (flat) {
       // A flat mockup looks wrong edge-on, so it sways instead of spinning.
       g.rotation.y = Math.sin(t * 0.7) * 0.35;
     } else {
@@ -80,6 +85,16 @@ export default function FloatingProduct() {
   };
 
   const procedural = <ProceduralProduct product={product} colour={variant.colour} />;
+  const fallback =
+    hasImage === true ? (
+      <SceneErrorBoundary fallback={procedural} label="product image">
+        <Suspense fallback={procedural}>
+          <ImageProduct src={product.images.front} />
+        </Suspense>
+      </SceneErrorBoundary>
+    ) : (
+      procedural
+    );
 
   return (
     <group>
@@ -123,14 +138,14 @@ export default function FloatingProduct() {
           <sphereGeometry args={[0.3, 8, 8]} />
           <meshBasicMaterial />
         </mesh>
-        {hasImage === true ? (
-          <SceneErrorBoundary fallback={procedural} label="product image">
-            <Suspense fallback={procedural}>
-              <ImageProduct src={product.images.front} />
+        {hasModel === true && product.model ? (
+          <SceneErrorBoundary fallback={fallback} label="product model">
+            <Suspense fallback={fallback}>
+              <ModelProduct src={product.model} colour={variant.colour} size={MODEL_SIZE[product.id] ?? 0.5} />
             </Suspense>
           </SceneErrorBoundary>
         ) : (
-          procedural
+          fallback
         )}
       </group>
     </group>
@@ -146,6 +161,81 @@ function ProceduralProduct({ product, colour }: { product: Product; colour: stri
     default:
       return <LongSleeveModel colour={colour} />;
   }
+}
+
+/** How big each model floats (its largest side, metres): the cap enlarged so it reads. */
+const MODEL_SIZE: Partial<Record<Product["id"], number>> = { cap: 0.34, hoodie: 0.66, longsleeve: 0.66 };
+
+/**
+ * Very dark cloth would render as a silhouette in a lamp-lit room; lift it
+ * just enough for its folds to show (it still reads as black).
+ */
+function clothColour(colour: string): THREE.Color {
+  const c = new THREE.Color(colour);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  if (hsl.l < 0.14) c.setHSL(hsl.h, hsl.s, 0.14);
+  return c;
+}
+
+/**
+ * A product's model: centred on its own middle, scaled to `size`, its
+ * "Fabric" dyed the chosen colour, the stitched and printed decals cut out
+ * crisply (no sorting against the cloth they lie on).
+ */
+function ModelProduct({ src, colour, size }: { src: string; colour: string; size: number }) {
+  const gltf = useGLTF(src, "/draco/");
+  const { scene, fabrics } = useMemo(() => {
+    const root = gltf.scene.clone(true);
+    const fabrics: THREE.MeshStandardMaterial[] = [];
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const m = (mesh.material as THREE.MeshStandardMaterial).clone();
+      mesh.material = m;
+      if (m.name === "Fabric") fabrics.push(m);
+      if (m.name === "Embroidery") {
+        // Cut out, not blended: it must write depth, or cloth drawn after it covers it.
+        m.transparent = false;
+        m.depthWrite = true;
+        m.alphaTest = 0.35;
+        m.polygonOffset = true;
+        m.polygonOffsetFactor = -2;
+      } else if (m.name === "Print") {
+        // A halftone: blended, so the dots read as the photo's greys.
+        m.transparent = true;
+        m.depthWrite = false;
+        m.polygonOffset = true;
+        m.polygonOffsetFactor = -2;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(root);
+    const dims = box.getSize(new THREE.Vector3());
+    const k = size / Math.max(dims.x, dims.y, dims.z, 1e-3);
+    const centre = box.getCenter(new THREE.Vector3());
+    const wrap = new THREE.Group();
+    root.position.copy(centre).multiplyScalar(-1);
+    wrap.add(root);
+    wrap.scale.setScalar(k);
+    return { scene: wrap, fabrics };
+  }, [gltf.scene, size]);
+
+  useEffect(() => {
+    const c = clothColour(colour);
+    for (const m of fabrics) m.color.copy(c);
+  }, [fabrics, colour]);
+
+  useEffect(
+    () => () => {
+      scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) (mesh.material as THREE.Material).dispose();
+      });
+    },
+    [scene],
+  );
+
+  return <primitive object={scene} />;
 }
 
 /** Front mockup mapped on a plane, sized by the image's aspect. */

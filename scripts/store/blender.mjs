@@ -1,7 +1,7 @@
 // Runs one of the store's Blender build scripts headless (no window, no
 // add-ons, factory settings), so the models are made the same way every time.
 //
-//   node scripts/room/blender.mjs scripts/room/room.py
+//   node scripts/store/blender.mjs scripts/store/room.py
 //
 // Blender is found at BLENDER, else the usual Windows install (5.2).
 
@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 
 const script = process.argv[2];
 if (!script) {
-  console.error("usage: node scripts/room/blender.mjs <script.py> [-- args]");
+  console.error("usage: node scripts/store/blender.mjs <script.py> [-- args]");
   process.exit(2);
 }
 const candidates = [

@@ -5,7 +5,7 @@
  *
  * The far bank is Felix's own photo from the garden gate at dusk, cut out
  * along the skyline (public/store/farbank-evening.webp), and a daylight
- * repaint of the same skyline (farbank-day.webp); scripts/room/textures.mjs
+ * repaint of the same skyline (farbank-day.webp); scripts/store/textures.mjs
  * makes both. The sky is drawn here and eases from pale day to the photo's
  * deep blue dusk; the water mirrors the far bank, lit windows and all, and
  * ripples and glints move on it. Until the photos have loaded (or if they

@@ -269,30 +269,92 @@ function KittyModel({ motion }: { motion: RefObject<KittyMotion> }) {
   );
 }
 
-/** Rigged cat from /models/kitty.glb: normalised to ~0.36 m tall, walk/idle clips crossfaded. */
+/** How far she turns her head to look at you (radians), split between neck and head. */
+const LOOK_YAW = 0.9;
+const LOOK_PITCH = 0.45;
+const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Kitty from /models/kitty.glb (scripts/store/kitty.py): modelled at her real
+ * size (about 0.34 m to the top of her head), "Walk" and "Idle" crossfaded
+ * as she sets off and stops. Stood still, she turns her head to look at
+ * the visitor, on top of whatever the clip is doing.
+ */
 function KittyGlb({ motion }: { motion: RefObject<KittyMotion> }) {
   const root = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(KITTY_GLB, "/draco/");
   const { actions, names } = useAnimations(animations, root);
   const wasMoving = useRef<boolean | null>(null);
+  const look = useRef({ yaw: 0, pitch: 0 });
+  const tmp = useMemo(
+    () => ({ cam: new THREE.Vector3(), head: new THREE.Vector3(), right: new THREE.Vector3(), q: new THREE.Quaternion(), pq: new THREE.Quaternion(), axis: new THREE.Vector3() }),
+    [],
+  );
 
+  // Authored in metres; only rescale a model that clearly is not.
   const scale = useMemo(() => {
     const box = new THREE.Box3().setFromObject(scene);
     const h = box.max.y - box.min.y;
-    return Number.isFinite(h) && h > 0 ? 0.36 / h : 1;
+    return Number.isFinite(h) && h > 0.2 && h < 0.6 ? 1 : Number.isFinite(h) && h > 0 ? 0.36 / h : 1;
+  }, [scene]);
+
+  const bones = useMemo(() => {
+    let head: THREE.Object3D | null = null;
+    let neck: THREE.Object3D | null = null;
+    scene.traverse((o) => {
+      if (!(o as THREE.Bone).isBone) return;
+      if (o.name === "head") head = o;
+      if (o.name === "neck") neck = o;
+    });
+    return { head: head as THREE.Object3D | null, neck: neck as THREE.Object3D | null };
   }, [scene]);
 
   const walkName = names.find((n) => /walk|run|trot/i.test(n));
   const idleName = names.find((n) => /idle|sit|breath/i.test(n)) ?? names.find((n) => n !== walkName);
 
-  useFrame(() => {
-    const moving = motion.current.moving;
-    if (moving === wasMoving.current) return;
-    wasMoving.current = moving;
-    const play = moving ? walkName : idleName;
-    const stop = moving ? idleName : walkName;
-    if (stop) actions[stop]?.fadeOut(0.25);
-    if (play) actions[play]?.reset().fadeIn(0.25).play();
+  /** Turn a bone by a rotation given in world space, on top of its animated pose. */
+  const turn = (bone: THREE.Object3D, worldAxis: THREE.Vector3, angle: number) => {
+    if (!bone.parent || Math.abs(angle) < 1e-4) return;
+    bone.parent.getWorldQuaternion(tmp.pq);
+    tmp.axis.copy(worldAxis).applyQuaternion(tmp.pq.invert());
+    tmp.q.setFromAxisAngle(tmp.axis, angle);
+    bone.quaternion.premultiply(tmp.q);
+  };
+
+  // Runs after useAnimations' own frame callback, so it adds to the clip's pose.
+  useFrame((state, rawDt) => {
+    const m = motion.current;
+    if (m.moving !== wasMoving.current) {
+      wasMoving.current = m.moving;
+      const play = m.moving ? walkName : idleName;
+      const stop = m.moving ? idleName : walkName;
+      if (stop) actions[stop]?.fadeOut(0.25);
+      if (play) actions[play]?.reset().fadeIn(0.25).play();
+    }
+    const g = root.current;
+    const { head, neck } = bones;
+    if (!g || !head || !neck) return;
+    let yaw = 0;
+    let pitch = 0;
+    if (!m.moving) {
+      tmp.cam.copy(state.camera.position);
+      g.worldToLocal(tmp.cam);
+      head.getWorldPosition(tmp.head);
+      g.worldToLocal(tmp.head);
+      tmp.cam.sub(tmp.head);
+      yaw = THREE.MathUtils.clamp(Math.atan2(tmp.cam.x, tmp.cam.z), -LOOK_YAW, LOOK_YAW);
+      pitch = THREE.MathUtils.clamp(Math.atan2(tmp.cam.y, Math.hypot(tmp.cam.x, tmp.cam.z)), -LOOK_PITCH * 0.5, LOOK_PITCH);
+    }
+    const k = 1 - Math.exp(-Math.min(rawDt, 0.1) * 4);
+    look.current.yaw += (yaw - look.current.yaw) * k;
+    look.current.pitch += (pitch - look.current.pitch) * k;
+    // Her right, in the world: for nodding up and down.
+    tmp.right.set(1, 0, 0).applyQuaternion(g.getWorldQuaternion(tmp.q));
+    const { yaw: y, pitch: p } = look.current;
+    turn(neck, UP, y * 0.4);
+    turn(neck, tmp.right, -p * 0.35);
+    turn(head, UP, y * 0.6);
+    turn(head, tmp.right, -p * 0.65);
   });
 
   return (

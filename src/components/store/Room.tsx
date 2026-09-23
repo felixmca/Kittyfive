@@ -1,7 +1,7 @@
 "use client";
 /**
  * The living room and garden at Kitty's, modelled in Blender from Felix's
- * photos (scripts/room/room.py → /models/room.glb), with the Thames behind
+ * photos (scripts/store/room.py → /models/room.glb), with the Thames behind
  * everything (RiverBackdrop). While the model loads, or if it cannot, a bare
  * shell of the same room stands in, so Kitty always has a floor.
  *
