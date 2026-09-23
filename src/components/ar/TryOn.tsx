@@ -120,11 +120,13 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("fit"),
   );
   const fitGarment = fitWanted && product.anchor !== "head";
+  // The silhouette is on for the whole visit under ?fit=1 (only the garments
+  // use it), so switching products does not rebuild the tracker.
   const {
     landmarks,
     status: tracking,
     mask,
-  } = useLandmarks(videoRef, live && !use3dCap, { segmentation: fitGarment });
+  } = useLandmarks(videoRef, live && !use3dCap, { segmentation: fitWanted });
   const { head, status: faceTracking } = useFaceTracking(videoRef, live && use3dCap);
   if (faceTracking === "unavailable" && !faceFailed) setFaceFailed(true);
 

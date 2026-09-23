@@ -53,7 +53,7 @@ toast, showToast(msg)
 | `src/components/store/*` + `src/app/store/page.tsx` | `default StoreScene()` | R3F living room (a placeholder room built from primitives until `/models/room.glb` exists — the river in the window as a shader (`RiverWindow.tsx`), a glass door with a cat flap out to a garden with swaying plants and the Thames beyond (`Garden.tsx`), sofa, kitchen counter; day or evening light from London time or the sun/moon `LightToggle`, eased through the shared `ambience.ts` record), Kitty NPC (`/models/kitty.glb` if present, else a procedural black-and-white cat) walking between "presentation spots", the current product floating and rotating beside her, `Next`/`Previous` arrows, product panel (name, method, price, variant picker, **Buy** → `POST /api/checkout`), chat dock. Kitty opens with her tuned opening line (Kitty Tunables; default "Check this out."), and when left alone wanders to the window, the garden door or the rug (`POINTS_OF_INTEREST` in `spots.ts`), says a line there and comes back. |
 | `src/components/chat/*` + `src/app/api/chat/route.ts` | `default ChatDock()` | Streams from `/api/chat` (Claude, see below). Keeps last 12 turns client-side. Product context injected server-side from `productIndex` sent with each message. |
 | `src/lib/commerce/*`, `src/app/api/{checkout,snack,webhooks}/**`, `supabase/commerce.sql` (Phase 6), `src/app/checkout/success/page.tsx` | | Stripe Checkout Sessions, verified webhooks, Supabase orders, print-on-demand adapter with a **demo implementation** when env is unset. |
-| `src/components/ar/*` + `src/app/try-on/page.tsx` | `default TryOn()` | `getUserMedia` (front/back switch), MediaPipe Pose/Face landmarks → cap on head / hoodie on torso as 2D overlays (product `images.front` cut-outs) with smoothing; a small R3F Kitty on an assumed floor plane at the bottom of the frame; capture-to-PNG share button. Must degrade gracefully (no camera permission → explanation + static mockup). With `?cap3d=1` the cap is 3D instead (`useFaceTracking.ts`: FaceLandmarker + facial transformation matrix; `Cap3D.tsx`: a three.js cap in screen space with a depth-only head occluder; `window.__cap3d.setHead()` poses a head for tests). |
+| `src/components/ar/*` + `src/app/try-on/page.tsx` | `default TryOn()` | `getUserMedia` (front/back switch), MediaPipe Pose/Face landmarks → cap on head / hoodie on torso as 2D overlays (product `images.front` cut-outs) with smoothing; a small R3F Kitty on an assumed floor plane at the bottom of the frame; capture-to-PNG share button. Must degrade gracefully (no camera permission → explanation + static mockup). With `?cap3d=1` the cap is 3D instead (`useFaceTracking.ts`: FaceLandmarker + facial transformation matrix; `Cap3D.tsx`: a three.js cap in screen space with a depth-only head occluder; `window.__cap3d.setHead()` poses a head for tests). With `?fit=1` the hoodie and long-sleeve are fitted (`fitGarment.ts`): the flat garment is a texture warped piecewise-affine onto the body (a grid shoulders → hem, sleeves shoulder → elbow → wrist, a forearm in front drawn over the body), the camera's normalised luminance multiplied through, trimmed to PoseLandmarker's segmentation mask when it covers the body, dropping to 1× when a frame costs over 12 ms; `window.__fit.setPose()` poses a body for tests. |
 | `src/app/stories/page.tsx` + `src/config/stories.ts` | | Vignette cards. |
 | `scripts/verify.mjs` | | Playwright, production build, 390 px + desktop, pixel readback on canvases, hit-test every control, reload check. Modelled on Birthday Lobby's harness. |
 
@@ -134,6 +134,11 @@ day and 30 days, admin read). Kitty is the pet in
 | `/api/chapters/draft` | Claude Opus 5 drafts a chapter from photos + text (editors only, structured output, fallbacks) |
 | `/api/admin/status` | Which services this deployment has keys for (admins only) |
 | `/api/story-report` | One anonymous technical summary of how the landing story went on a device (sendBeacon); stored via `report_story()` |
+| `/api/subscriptions/{invite,notify}` | Story emails (Phase 5), as the signed-in owner: invite an address (double opt-in); email a published chapter to its subscribers, once. 503 before touching anything while email is not set up |
+| `/api/subscriptions/{confirm,unsubscribe}` | The links in story emails (token in the body, or `?t=` for a mail app's one-click unsubscribe, RFC 8058) |
+| `/api/subscriptions/{status,preview}` | Can this deployment send email; what a chapter email (or the invitation) looks like |
+| `/api/webhooks/resend` | Bounces and complaints (Svix signature) stop an address's story emails; needs `RESEND_WEBHOOK_SECRET` and the service role key |
+| `/subscribe/confirm`, `/unsubscribe` | The pages behind the email links: a press, never on opening (mail scanners open links) |
 
 | Module | Owns |
 |---|---|
@@ -143,7 +148,9 @@ day and 30 days, admin read). Kitty is the pet in
 | `src/lib/studio/frames.ts` | Browser-side clip → frames and 9:16 start-frame crops |
 | `src/lib/persona.ts`, `personaServer.ts`, `personaClient.ts` | Kitty Tunables: types, defaults, validation, the deterministic prompt compiler; the chat route's cached read; the browser's read/save (demo: localStorage) and `useOpeningLine()` |
 | `src/components/admin/TunablesEditor.tsx`, `StoryReports.tsx` | The Tunables editor and the story-reports card on `/admin` |
-| `src/components/stories/*` | RippleGrid, TileFace, TileEditor, VolumeEditor |
+| `src/lib/mail.ts` | The one mailer (Resend, or a logged no-op): `deliver`, `deliverBatch` (100 a call), the email frame. Order emails and story emails both use it |
+| `src/lib/subscriptions/{client,emails,server,webhook}.ts` | Story emails: the browser side (live via RPC and the API; demo in localStorage), the two emails with List-Unsubscribe headers, route helpers, the Svix check. The tables (`story_subscriptions`, `story_emails`, `chapters.notified_at`) are written only through checked functions (see `supabase/migrations/20260923095138_story_subscriptions.sql`) |
+| `src/components/stories/*` | RippleGrid, TileFace, TileEditor, VolumeEditor; SubscribeCard (readers), SubscribersPanel (owners), EmailLinkAction (the email link pages) |
 | `src/components/reader/*` | ChapterReader, ReaderScene |
 | `src/components/studio/*` | ChapterStudio, SceneCard |
 
