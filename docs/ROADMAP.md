@@ -34,9 +34,9 @@ The three pillars, in Kitty's words:
 |---|---|---|---|
 | **0 · Foundation** | Story engine, store, try-on, commerce adapters, verify harness, research | — | ✅ done 21–22 Sep |
 | **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 swipe landing live with chapters 1–2; 3–4 play designed stand-ins until their clips land |
-| **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built and deployed; waiting on Felix's sign-up for the live studio test |
+| **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built, deployed and tested end to end in demo mode (23 Sep); waiting on Felix's sign-up for the live studio test |
 | **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room, garden and Kitty photos ([Handover 04](HANDOVER-04-STORE-PHOTOS.md)) | 🟡 chat on the real key + Kitty Tunables live; the house waits for the photos |
-| **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | — | ⬜ |
+| **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | Wear the cap once (`/try-on?cap3d=1`) | 🟡 3D cap built behind a switch; garments next |
 | **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | ⬜ |
 | **6 · Kitty's store takes money** | Printful UK, Stripe live, order emails | Stripe, Printful, Vercel Pro, Supabase Pro | ⬜ |
 | **7 · Your pet, your story** | Anyone signs up and makes their own pet's stories | Licence choice; generation budget | ⬜ |
@@ -208,7 +208,9 @@ to render on phones and easier to make charming.
 - [ ] Hoodie and long-sleeve: pose + body segmentation; the garment is warped
       to shoulders, hips and elbows (thin-plate spline); the camera's own
       shading is multiplied through so folds show; arms occlude correctly
-- [ ] Kitty stands next to you in 3D
+- [ ] Kitty stands next to you in 3D *(23 Sep: the drawn 3D cat now walks over
+      and sits beside whoever is being tracked, turned towards them, and
+      follows when they move; next, the real Kitty model and a floor under you)*
 - [ ] Upgrade path: Snap Camera Kit Web (application-gated) for draped cloth
 
 ## Phase 5 · Subscribe to Kitty Stories by email

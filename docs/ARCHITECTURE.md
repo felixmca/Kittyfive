@@ -130,7 +130,7 @@ day and 30 days, admin read). Kitty is the pet in
 | `/stories/new?volume=<slug>` | Chapter studio: photos + "what happened" → Claude draft → scenes with Kling prompts |
 | `/stories/<chapter>/edit` | The same studio for an existing chapter: scenes, prompts, 9:16 start frames, clip upload |
 | `/account` | Sign in / create account / forgotten password / set new password |
-| `/admin` | Admin-only dashboard: **Kitty Tunables** (sliders, length, effort, opening line, notes; live preview of her full instructions), connected services, the book at a glance |
+| `/admin` | Admin-only dashboard: **Kitty Tunables** (sliders, length, effort, opening line, notes; live preview of her full instructions), **the story on real phones** (the latest `story_reports`), connected services, the book at a glance. Seeing it once leaves a hint (`rememberAdmin`) so the menu offers "Admin" on every page |
 | `/api/chapters/draft` | Claude Opus 5 drafts a chapter from photos + text (editors only, structured output, fallbacks) |
 | `/api/admin/status` | Which services this deployment has keys for (admins only) |
 | `/api/story-report` | One anonymous technical summary of how the landing story went on a device (sendBeacon); stored via `report_story()` |
@@ -142,7 +142,7 @@ day and 30 days, admin read). Kitty is the pet in
 | `src/lib/stories/{types,read,client,media,draft}.ts` | Shapes and row mapping; server reads; browser writes (live + demo backends); photo resizing; draft schema |
 | `src/lib/studio/frames.ts` | Browser-side clip → frames and 9:16 start-frame crops |
 | `src/lib/persona.ts`, `personaServer.ts`, `personaClient.ts` | Kitty Tunables: types, defaults, validation, the deterministic prompt compiler; the chat route's cached read; the browser's read/save (demo: localStorage) and `useOpeningLine()` |
-| `src/components/admin/TunablesEditor.tsx` | The Tunables editor on `/admin` |
+| `src/components/admin/TunablesEditor.tsx`, `StoryReports.tsx` | The Tunables editor and the story-reports card on `/admin` |
 | `src/components/stories/*` | RippleGrid, TileFace, TileEditor, VolumeEditor |
 | `src/components/reader/*` | ChapterReader, ReaderScene |
 | `src/components/studio/*` | ChapterStudio, SceneCard |

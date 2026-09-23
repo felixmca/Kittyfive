@@ -46,8 +46,9 @@ const EFFORTS: { value: ChatEffort; label: string }[] = [
 ];
 
 const LABEL = "text-[11px] font-medium uppercase tracking-[0.18em] text-muted";
+// 16 px on phones: iOS Safari zooms the page into any text field smaller than that.
 const FIELD =
-  "mt-2 w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-fg outline-none transition-colors placeholder:text-muted/70 focus:border-accent/60";
+  "mt-2 w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[16px] sm:text-[15px] text-fg outline-none transition-colors placeholder:text-muted/70 focus:border-accent/60";
 
 function same(a: Tunables, b: Tunables): boolean {
   return JSON.stringify(a) === JSON.stringify(b);

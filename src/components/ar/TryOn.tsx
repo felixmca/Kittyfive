@@ -23,6 +23,7 @@ import Cap3D from "./Cap3D";
 import KittyCompanion from "./KittyCompanion";
 import MockupFallback from "./MockupFallback";
 import Overlay from "./Overlay";
+import type { PersonSpot } from "./landmarks";
 import { useFaceTracking } from "./useFaceTracking";
 import { useLandmarks } from "./useLandmarks";
 
@@ -85,6 +86,8 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const capCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const kittyCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** Where the tracked person is, for Kitty to sit beside them. */
+  const personRef = useRef<PersonSpot | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const alive = useRef(true);
   const phaseRef = useRef<Phase>(phase);
@@ -480,6 +483,7 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
           mirrored={mirrored}
           canvasRef={capCanvasRef}
           onSeenChange={setHeadSeen}
+          personRef={personRef}
         />
       )}
       {live && !use3dCap && (
@@ -491,11 +495,12 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
           mirrored={mirrored}
           canvasRef={overlayCanvasRef}
           onAnchoredChange={onAnchoredChange}
+          personRef={personRef}
         />
       )}
 
       {/* Kitty on the floor */}
-      <KittyCompanion canvasRef={kittyCanvasRef} />
+      <KittyCompanion canvasRef={kittyCanvasRef} personRef={personRef} />
 
       {/* top bar: controls left (after Kitty's home button), hint centre, right kept clear for the site menu */}
       <div

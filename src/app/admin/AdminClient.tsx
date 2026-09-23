@@ -10,6 +10,7 @@
  */
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
+import StoryReports from "@/components/admin/StoryReports";
 import TunablesEditor from "@/components/admin/TunablesEditor";
 import Chrome from "@/components/chrome/Chrome";
 import { SITE } from "@/config/site";
@@ -110,6 +111,10 @@ export default function AdminClient() {
           </Link>
         </Card>
 
+
+        <Card title="The story on real phones" wide>
+          <StoryReports live={auth.mode === "live"} />
+        </Card>
 
         <Card title="Connected services">
           {auth.mode === "demo" ? (

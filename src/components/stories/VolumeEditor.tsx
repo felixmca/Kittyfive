@@ -23,8 +23,9 @@ interface Props {
   onClose: () => void;
 }
 
+// 16 px on phones: iOS Safari zooms the page into any text field smaller than that.
 const FIELD =
-  "w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-fg placeholder:text-white/30 outline-none transition-colors focus:border-accent/70 focus:bg-white/[0.07]";
+  "w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[16px] sm:text-[15px] text-fg placeholder:text-white/30 outline-none transition-colors focus:border-accent/70 focus:bg-white/[0.07]";
 const LABEL = "mb-1.5 block text-[11px] font-medium uppercase tracking-[0.16em] text-muted";
 
 export const EMPTY_VOLUME: VolumeDraft = { title: "", subtitle: "", dateLabel: "", storyDate: "", mood: "", body: "" };

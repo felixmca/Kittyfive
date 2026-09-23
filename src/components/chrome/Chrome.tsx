@@ -9,7 +9,8 @@
  *     fold into an X while the drawer is open;
  *  3. a side drawer from the right (min(320px, 84vw)): Kitty (home) at the
  *     top with her face, then Kitty Stories · Kitty Store · Try it on ·
- *     Sign in / Your account, then Scroll to top · Scroll to bottom. The page
+ *     Sign in / Your account (and Admin, for an account last seen as one in
+ *     this browser), then Scroll to top · Scroll to bottom. The page
  *     you are on is marked. Backdrop tap and Escape close it, focus is
  *     trapped inside, and page scroll is locked through Lenis (stop/start) or,
  *     without Lenis, through overflow on <html>;
@@ -18,18 +19,19 @@
  *     past 60% of the viewport (so the landing's hero camera is not doubled);
  *  5. the toast renderer for useUi().toast, bottom-centre.
  *
- * Pages render this themselves (not the root layout) so the landing can pass
- * `hideCameraUntilScrolled`. Pages that put their own controls near the top
- * corners keep clear of the two buttons with ./layout.ts. Icons are inline
- * SVG / CSS only; no icon library. All motion is plain CSS transitions, which
- * globals.css collapses to ~0ms under prefers-reduced-motion.
+ * Pages render this themselves (not the root layout) so each can choose its
+ * camera button (`hideCamera`, `hideCameraUntilScrolled`). Pages that put
+ * their own controls near the top corners keep clear of the two buttons with
+ * ./layout.ts. Icons are inline SVG / CSS only; no icon library. All motion
+ * is plain CSS transitions, which globals.css collapses to ~0ms under
+ * prefers-reduced-motion.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode, type Ref } from "react";
 import { SITE } from "@/config/site";
 import { scrollToBottom, scrollToTop, useUi } from "@/lib/store";
-import { hasStoredSession } from "@/lib/supabase/sessionHint";
+import { hasStoredSession, wasAdmin } from "@/lib/supabase/sessionHint";
 import { getLenis } from "@/components/smooth/SmoothScroll";
 import KittyFace from "./KittyFace";
 import { CHROME_LEFT, CHROME_TOP } from "./layout";
@@ -268,8 +270,11 @@ function Drawer({
   const pathname = usePathname();
   // Read when the drawer opens, so it is right after signing in or out.
   const [signedIn, setSignedIn] = useState(false);
+  const [admin, setAdmin] = useState(false);
   useEffect(() => {
-    if (open) setSignedIn(hasStoredSession());
+    if (!open) return;
+    setSignedIn(hasStoredSession());
+    setAdmin(wasAdmin());
   }, [open]);
   // Closing lifts the scroll lock in an effect *after* this render commits,
   // and Lenis ignores scrollTo() while stopped, so the scroll itself waits a
@@ -389,6 +394,16 @@ function Drawer({
           >
             {signedIn ? SITE.nav.account.label : "Sign in"}
           </DrawerRow>
+          {admin ? (
+            <DrawerRow
+              href={SITE.nav.admin.href}
+              current={pathname === SITE.nav.admin.href}
+              onClick={onClose}
+              glyph={<ArrowGlyph />}
+            >
+              {SITE.nav.admin.label}
+            </DrawerRow>
+          ) : null}
         </nav>
 
         <div aria-hidden className="mx-4 my-4 h-px bg-white/10" />

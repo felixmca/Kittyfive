@@ -15,6 +15,9 @@ export const metadata: Metadata = {
     type: "website",
   },
   twitter: { card: "summary_large_image", title: SITE.name, description: SITE.tagline },
+  // Added to an iPhone's home screen: full screen, the status bar over the
+  // dark page (the chrome already keeps clear of it with safe-area insets).
+  appleWebApp: { capable: true, title: SITE.name, statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

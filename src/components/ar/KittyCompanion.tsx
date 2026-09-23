@@ -3,7 +3,10 @@
  * KittyCompanion — a small transparent R3F canvas over the bottom 35% of the
  * try-on. Inside: a procedural black-and-white cat (no textures, no GLB) that
  * walks slowly left and right along an assumed floor line, turns at the
- * edges, and now and then sits down and looks up at the camera.
+ * edges, and now and then sits down and looks up at the camera. While
+ * someone is being tracked she goes and sits beside them instead (on the
+ * side with more room, clear of their shoulders), turned a little towards
+ * them, and moves over when they do.
  *
  * The camera is orthographic at zoom 1, so one world unit is one CSS pixel:
  * the cat is built 0.9 units tall and scaled so she reads about 120 px.
@@ -15,6 +18,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
 import ArErrorBoundary from "./ArErrorBoundary";
+import type { PersonSpot } from "./landmarks";
 
 const BLACK = "#15151a";
 const WHITE = "#f4f1ea";
@@ -27,6 +31,8 @@ const CAT_PX = 120;
 const UNIT_HEIGHT = 0.9;
 /** Walking speed, CSS px per second. */
 const WALK_SPEED = 30;
+/** A person last seen longer ago than this is gone. */
+const PERSON_STALE_MS = 600;
 
 /** SSR-safe reduced-motion flag that follows the OS setting live. */
 export function usePrefersReducedMotion(): boolean {
@@ -75,9 +81,11 @@ interface CatState {
   nextBlink: number;
   blinkUntil: number;
   sit: number; // 0 standing … 1 sitting, eased
+  /** Which side of the person she keeps to (−1 left, +1 right), once chosen. */
+  side: number;
 }
 
-function Cat({ reduced }: { reduced: boolean }) {
+function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<PersonSpot | null> }) {
   const size = useThree((s) => s.size);
   const invalidate = useThree((s) => s.invalidate);
 
@@ -99,6 +107,7 @@ function Cat({ reduced }: { reduced: boolean }) {
     nextBlink: 1.5,
     blinkUntil: 0,
     sit: reduced ? 1 : 0,
+    side: 0,
   });
 
   const mats = useMemo(
@@ -141,7 +150,31 @@ function Cat({ reduced }: { reduced: boolean }) {
 
     if (s.until === 0) s.until = now + 5 + Math.random() * 5;
 
-    if (!reduced) {
+    const person = personRef?.current;
+    const beside = !reduced && person && performance.now() - person.at < PERSON_STALE_MS ? person : null;
+    if (beside) {
+      // A spot next to them, clear of their shoulders, on the roomier side
+      // (and she stays on her side unless it no longer fits).
+      const px = beside.x - size.width / 2;
+      const gap = beside.shoulderW / 2 + scale * 0.55;
+      const fits = (side: number) => Math.abs(px + side * gap) <= halfW;
+      if (!s.side || !fits(s.side)) s.side = fits(1) && (!fits(-1) || px < 0) ? 1 : -1;
+      const tx = Math.max(-halfW, Math.min(halfW, px + s.side * gap));
+      const d = tx - s.x;
+      if (Math.abs(d) > 10 || (s.mode === "walk" && Math.abs(d) > 2)) {
+        s.mode = "walk";
+        s.dir = d > 0 ? 1 : -1;
+        s.targetHeading = s.dir > 0 ? 0 : Math.PI;
+        const step = Math.min(Math.abs(d), WALK_SPEED * 1.8 * dt);
+        s.x += s.dir * step;
+        s.phase += dt * 10;
+      } else {
+        s.mode = "sit";
+        // Facing the camera, turned a little towards them.
+        s.targetHeading = -Math.PI / 2 + (px > s.x ? 0.45 : -0.45);
+      }
+      s.until = now + 4;
+    } else if (!reduced) {
       if (s.mode === "walk") {
         s.x += s.dir * WALK_SPEED * dt;
         s.phase += dt * 8;
@@ -319,10 +352,12 @@ function Cat({ reduced }: { reduced: boolean }) {
 interface KittyCompanionProps {
   /** Receives the WebGL canvas so the shutter can composite Kitty into the photo. */
   canvasRef?: RefObject<HTMLCanvasElement | null>;
+  /** Where the person is (from the overlay that is tracking them); she sits beside them. */
+  personRef?: RefObject<PersonSpot | null>;
   className?: string;
 }
 
-export default function KittyCompanion({ canvasRef, className = "" }: KittyCompanionProps) {
+export default function KittyCompanion({ canvasRef, personRef, className = "" }: KittyCompanionProps) {
   const reduced = usePrefersReducedMotion();
   return (
     <div
@@ -350,7 +385,7 @@ export default function KittyCompanion({ canvasRef, className = "" }: KittyCompa
           <ambientLight intensity={0.75} />
           <directionalLight position={[200, 320, 500]} intensity={1.5} />
           <directionalLight position={[-250, 200, -200]} intensity={0.45} color="#cfd8ff" />
-          <Cat reduced={reduced} />
+          <Cat reduced={reduced} personRef={personRef} />
         </Canvas>
       </ArErrorBoundary>
     </div>

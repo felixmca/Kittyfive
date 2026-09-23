@@ -37,7 +37,7 @@ const BASE = (args.base ?? "http://localhost:3201").replace(/\/$/, "");
 const VIEWPORTS = [
   { name: "390", width: 390, height: 844, mobile: true, engine: "chromium" },
   { name: "375", width: 375, height: 667, mobile: true, engine: "chromium", only: ["landing", "pages"] },
-  { name: "iphone", device: "iPhone 17 Pro", mobile: true, engine: "webkit", only: ["landing", "pages", "stories"] },
+  { name: "iphone", device: "iPhone 17 Pro", mobile: true, engine: "webkit", only: ["landing", "pages", "stories", "store", "admin"] },
   { name: "1280", width: 1280, height: 800, mobile: false, engine: "chromium" },
 ]
   .map((v) => (v.device ? { ...v, width: devices[v.device].viewport.width, height: devices[v.device].viewport.height } : v))
@@ -851,6 +851,13 @@ async function journeyAdmin(browser, viewport) {
     await page.waitForTimeout(500);
     const opening = (await page.$eval('section[aria-label="Chat with Kitty"] p', (el) => el.textContent ?? "").catch(() => "")) ?? "";
     record(viewport.name, route, "the store's chat opens with the tuned line", opening.startsWith("Oh. You again."), opening.slice(0, 60));
+    // Having been seen as an admin, the menu offers Admin on any page.
+    await page.click('button[aria-label="Close chat"]').catch(() => {});
+    await page.click('button[aria-label="Open menu"]');
+    await page.waitForTimeout(500);
+    const adminRow = await page.$('[role="dialog"] a[href="/admin"]');
+    record(viewport.name, route, "the menu offers Admin to an admin", !!adminRow);
+    await page.keyboard.press("Escape");
     record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
   });

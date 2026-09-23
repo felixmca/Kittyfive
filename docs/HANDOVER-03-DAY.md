@@ -8,7 +8,54 @@ is at the bottom of "Progress".
 
 ## For Felix, when you are back
 
-*(Written last; see the bottom of this file.)*
+**Everything below is live at https://kittyfive.vercel.app.** Screenshots are
+in [`docs/screenshots/day-23/`](screenshots/day-23/).
+
+**Please try these on your iPhone (five minutes):**
+1. **The landing.** The story should now start under the camera within a
+   couple of seconds and play all the way through. It was failing on iPhone
+   because it kept about 340 MB of video frames in memory, more than Safari
+   allows a page; it now keeps about 80 MB and decodes in the background.
+   Swipe through all four chapters, and hold and drag once.
+2. **The Kitty button**, top-left on every page (her face): it takes you
+   home. The menu (top-right) now starts with Kitty and has "Try it on".
+3. **The store** (`/store`): the room follows the time at your flat (evening
+   from 7pm), and the sun/moon button under the menu flips it. There is a
+   garden through a glass door, and if you leave Kitty alone she wanders to
+   the window or the garden door and back.
+4. **The 3D cap:** open `https://kittyfive.vercel.app/try-on?cap3d=1`, allow
+   the camera and wear the cap. Tell the next session where it sits wrong
+   (too high, too big, visor too long). Until then the normal try-on is
+   unchanged.
+
+If the landing still misbehaves, you don't need to describe it: each visit
+sends a small anonymous report (browser, screen, how far the story got, any
+error), and the next session can read yours (§2 below).
+
+**What you need to do (unchanged from before, plus the photos):**
+- Supabase → Authentication → URL Configuration, then sign up with your admin
+  address (Roadmap 2A). After that, **/admin → Kitty Tunables** sets how Kitty
+  talks in the store's chat (warmth, dryness, snacks, merch, story, length,
+  opening line, notes), and the menu shows "Admin".
+- Chapters 3 and 4 clips and the MISSING flyer ([Handover 01](HANDOVER-01-STORY-ASSETS.md)).
+- **New:** photos for the store's 3D house, Kitty's markings for the 3D cat,
+  and a turntable video: the shot list is [Handover 04](HANDOVER-04-STORE-PHOTOS.md).
+
+**Choices I made (say if you want them different):**
+- The floating camera button is gone from the landing, the store, checkout
+  and the try-on itself (it covered buttons there); the end of the landing and
+  the store's product panel have "Try it on" instead.
+- "Skip story" moved next to the Kitty button; the kitten clock moved down.
+- The chat stays on Claude Opus 5 at low effort, now with Anthropic's
+  server-side fallback on, so a declined turn is retried on a fallback model
+  instead of leaving Kitty silent.
+- Link previews (WhatsApp, iMessage) show her close-up from the end of
+  chapter 1 with her name; chapters show their own picture.
+
+**Not done, and why:** the Blender house and the real 3D Kitty need your
+photos (and the cat model needs downloading, which I did not do without
+asking); realistic hoodie/long-sleeve try-on needs a person on camera to
+calibrate against; Phases 5–6 need a domain, Stripe and Printful accounts.
 
 ## Plan for the day
 
@@ -185,3 +232,22 @@ a device, it falls back to the flat cap by itself.
 
 Also: link previews (WhatsApp, iMessage) now show Kitty's photo with her name,
 and "Add to Home Screen" gives an app with her face as the icon.
+
+### 10 · Small things for you on your phone
+
+- **Typing on the iPhone no longer zooms the page.** Safari zooms into any
+  text field smaller than 16 px; the editors (Kitty Tunables, the tile and
+  volume editors, the chapter studio, Kling prompts) were 15 px and 13 px.
+  They are 16 px on phones now.
+- **/admin shows "The story on real phones"**: the last 25 story reports,
+  one line each (device and browser, how fast it started, how many chapters
+  were seen, frames held, the first error). Once you have signed in, the menu
+  also has an **Admin** row.
+- **Add to Home Screen** opens Kitty full screen with a dark status bar.
+- The database's RLS smoke test (`node scripts/db.mjs supabase/tests/rls-smoke.sql`,
+  rolls back) now also proves that strangers cannot set Kitty's Tunables or
+  read the story reports, and that anonymous visitors can only add reports
+  through the checked function.
+- **In the try-on, Kitty comes and sits beside you** (on the side with more
+  room, turned towards you) instead of pacing the bottom of the screen, and
+  moves over when you do.

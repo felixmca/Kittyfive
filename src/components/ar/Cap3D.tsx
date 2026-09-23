@@ -27,6 +27,7 @@
  */
 import { useEffect, useRef, type RefObject } from "react";
 import * as THREE from "three";
+import type { PersonSpot } from "./landmarks";
 import type { Head } from "./useFaceTracking";
 
 interface Props {
@@ -38,6 +39,8 @@ interface Props {
   canvasRef?: RefObject<HTMLCanvasElement | null>;
   /** Fires only when a head comes into or goes out of view. */
   onSeenChange?: (seen: boolean) => void;
+  /** Receives where the person is each frame, for Kitty to sit beside them. */
+  personRef?: RefObject<PersonSpot | null>;
 }
 
 type CapWindow = Window & { __cap3d?: { setHead: (h: Head | null) => void; state: () => { visible: boolean } } };
@@ -161,7 +164,7 @@ function buildCap(colour: string): { cap: THREE.Group; materials: THREE.MeshStan
   };
 }
 
-export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onSeenChange }: Props) {
+export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onSeenChange, personRef }: Props) {
   const localRef = useRef<HTMLCanvasElement | null>(null);
   const colourRef = useRef(colour);
   const mirroredRef = useRef(mirrored);
@@ -285,6 +288,7 @@ export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onS
       pivot.visible = true;
       visible = true;
       report(true);
+      if (personRef) personRef.current = { x: px, shoulderW: size * 2.3, at: now };
 
       if (video && probeCtx && now - lastProbe > 500 && video.readyState >= 2) {
         lastProbe = now;
@@ -325,7 +329,7 @@ export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onS
       delete w.__cap3d;
       if (canvasRef && canvasRef.current === canvas) canvasRef.current = null;
     };
-  }, [head, videoRef, canvasRef]);
+  }, [head, videoRef, canvasRef, personRef]);
 
   return <canvas ref={localRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" data-cap3d />;
 }

@@ -52,6 +52,18 @@ export interface Pt {
 export type ScreenPose = Record<LandmarkKey, Pt>;
 
 /**
+ * Where the person is across the try-on, for Kitty to sit beside them:
+ * container x of the middle of their shoulders (or head), their shoulder
+ * width in px, and when it was seen (performance.now()). Written each frame
+ * by whichever overlay is tracking them (2D merch or the 3D cap).
+ */
+export interface PersonSpot {
+  x: number;
+  shoulderW: number;
+  at: number;
+}
+
+/**
  * Map normalised video landmarks onto the container, reproducing what
  * `object-fit: cover` does to the video and, when `mirrored`, the CSS
  * `scaleX(-1)` on the front camera. Drawing the overlay in this mirrored

@@ -40,8 +40,9 @@ interface Props {
   onClip: (file: File) => void;
 }
 
+// 16 px on phones: iOS Safari zooms the page into any text field smaller than that.
 const FIELD =
-  "w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-fg placeholder:text-white/30 outline-none transition-colors focus:border-accent/70 focus:bg-white/[0.07]";
+  "w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[16px] sm:text-[15px] text-fg placeholder:text-white/30 outline-none transition-colors focus:border-accent/70 focus:bg-white/[0.07]";
 const LABEL = "mb-1.5 block text-[11px] font-medium uppercase tracking-[0.16em] text-muted";
 const SMALL_BTN =
   "inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 px-3.5 text-[13px] text-fg/90 transition-colors hover:border-white/35 disabled:opacity-40";
@@ -184,7 +185,7 @@ export default function SceneCard({
             <label className={LABEL} htmlFor={`${id}-p`}>Kling 3.0 prompt for artta</label>
             <textarea
               id={`${id}-p`}
-              className={`${FIELD} min-h-[120px] resize-y font-mono text-[13px] leading-relaxed`}
+              className={`${FIELD} min-h-[120px] resize-y font-mono text-[16px] leading-relaxed sm:text-[13px]`}
               value={scene.videoPrompt}
               maxLength={2000}
               onChange={(e) => onChange({ videoPrompt: e.target.value })}

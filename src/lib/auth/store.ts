@@ -17,6 +17,7 @@
 import { create } from "zustand";
 import { authLanding, scrubAuthParamsFromUrl } from "./authLanding";
 import { browserSupabase, liveMode } from "@/lib/supabase/browser";
+import { rememberAdmin } from "@/lib/supabase/sessionHint";
 
 export interface AuthUser {
   id: string;
@@ -96,7 +97,9 @@ async function refreshAdmin(set: (p: Partial<AuthState>) => void, hasUser: boole
   }
   try {
     const { data, error } = await browserSupabase().rpc("is_admin");
-    set({ isAdmin: !error && data === true });
+    const admin = !error && data === true;
+    set({ isAdmin: admin });
+    rememberAdmin(admin);
   } catch {
     set({ isAdmin: false });
   }
@@ -117,6 +120,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (!liveMode()) {
       const user = demoUser();
       set({ mode: "demo", ready: true, user, isAdmin: Boolean(user) });
+      rememberAdmin(Boolean(user));
       return;
     }
 
@@ -156,6 +160,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (get().mode === "demo") {
       saveDemoUser(email, displayName);
       set({ user: { id: "demo-user", email, displayName }, isAdmin: true });
+      rememberAdmin(true);
       return {};
     }
     const { data, error } = await browserSupabase().auth.signUp({
@@ -172,6 +177,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (get().mode === "demo") {
       saveDemoUser(email);
       set({ user: { id: "demo-user", email, displayName: null }, isAdmin: true });
+      rememberAdmin(true);
       return null;
     }
     const { error } = await browserSupabase().auth.signInWithPassword({ email, password });
@@ -187,10 +193,12 @@ export const useAuth = create<AuthState>((set, get) => ({
         /* ignore */
       }
       set({ user: null, isAdmin: false, recovery: false });
+      rememberAdmin(false);
       return;
     }
     await browserSupabase().auth.signOut();
     set({ user: null, isAdmin: false, recovery: false });
+    rememberAdmin(false);
   },
 
   requestReset: async (email) => {

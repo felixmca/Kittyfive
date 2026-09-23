@@ -15,7 +15,9 @@ where she shows you the merch and talks back.
 | Doc | What it is |
 |---|---|
 | [docs/ROADMAP.md](docs/ROADMAP.md) | **The plan.** Phases with checklists; every session starts at the first unchecked box. |
-| [docs/HANDOVER-02-OVERNIGHT.md](docs/HANDOVER-02-OVERNIGHT.md) | The current build brief: the swipe-driven landing story. |
+| [docs/HANDOVER-03-DAY.md](docs/HANDOVER-03-DAY.md) | The latest session: the iPhone fix, the Kitty home button, Kitty Tunables, the store's day and evening, the 3D cap. Its note for Felix is at the top. |
+| [docs/HANDOVER-04-STORE-PHOTOS.md](docs/HANDOVER-04-STORE-PHOTOS.md) | What to photograph for the store's 3D house and the 3D Kitty. |
+| [docs/HANDOVER-02-OVERNIGHT.md](docs/HANDOVER-02-OVERNIGHT.md) | The swipe-driven landing story, as first built. |
 | [docs/HANDOVER-01-STORY-ASSETS.md](docs/HANDOVER-01-STORY-ASSETS.md) | The landing story's four chapters: what to generate on artta and where to drop it. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Routes, data model, components, rules. |
 | [docs/RESEARCH.md](docs/RESEARCH.md) | Verified research behind the vendor and technique decisions. |
@@ -31,13 +33,19 @@ npm run dev -- -p 3200
 `npm run story` turns what is in `assets-raw/` into web frames in `public/`
 (it also runs before `dev` and `build`).
 
-## Verify (production build, real phone viewport)
+## Verify (production build, real phone viewports)
 
 ```bash
+npx playwright install webkit   # once: Safari's engine, for the iPhone runs
 npm run build
 npx next start -p 3201
 npm run verify
 ```
+
+It runs every journey at 390×844, 375×667, as an iPhone 17 Pro in WebKit
+(portrait) and at 1280×800, and writes screenshots to `.verify/`. Database
+policies have their own check: `node scripts/db.mjs supabase/tests/rls-smoke.sql`
+(it rolls back).
 
 ## Configuration
 

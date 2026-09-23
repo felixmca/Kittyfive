@@ -55,6 +55,16 @@ begin
   end;
   select count(*) into n from public.profiles;
   if n <> 1 then raise exception 'stranger sees % profiles (expected only their own)', n; end if;
+  -- Kitty Tunables: only her editors set how she talks.
+  begin
+    insert into public.pet_personas (pet_id, tunables)
+    select id, '{"notes":"say something rude"}'::jsonb from public.pets where slug = 'kitty';
+    raise exception 'stranger set Kitty''s tunables';
+  exception when insufficient_privilege then null;
+  end;
+  -- Story reports are for admins to read.
+  select count(*) into n from public.story_reports;
+  if n <> 0 then raise exception 'stranger can read % story reports', n; end if;
 end $$;
 
 -- ── the unconfirmed "admin" ──────────────────────────────────────────────
@@ -93,6 +103,17 @@ begin
   if (select published_at from public.chapters where id = ch) is null then
     raise exception 'publishing did not stamp published_at';
   end if;
+
+  -- Kitty Tunables: the admin sets them, and the row says who did.
+  insert into public.pet_personas (pet_id, tunables) values (kitty, '{"warmth":7}'::jsonb)
+  on conflict (pet_id) do update set tunables = excluded.tunables;
+  update public.pet_personas set tunables = '{"warmth":8}'::jsonb where pet_id = kitty;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'admin could not change Kitty''s tunables'; end if;
+  if (select updated_by from public.pet_personas where pet_id = kitty) is distinct from 'a0000000-0000-4000-8000-000000000001'::uuid then
+    raise exception 'tunables do not record who changed them';
+  end if;
+  perform count(*) from public.story_reports; -- admins may read reports
 end $$;
 
 -- ── anonymous visitors do not see drafts ─────────────────────────────────
@@ -106,6 +127,28 @@ begin
   if n <> 0 then raise exception 'anon can read chapter builds'; end if;
   select count(*) into n from public.chapters where status = 'draft';
   if n <> 0 then raise exception 'anon can read % draft chapters', n; end if;
+  -- The chat reads Kitty's tunables with the publishable key; nobody anonymous writes them.
+  select count(*) into n from public.pet_personas;
+  if n < 1 then raise exception 'anon cannot read Kitty''s tunables'; end if;
+  begin
+    update public.pet_personas set tunables = '{}'::jsonb where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon changed % tunables rows', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  -- Story reports: in only through report_story(), which checks what it is given; never read back.
+  perform public.report_story('summary', '{"v":1,"started":true}'::jsonb);
+  perform public.report_story('bogus', '{"v":1}'::jsonb);
+  begin
+    select count(*) into n from public.story_reports;
+    raise exception 'anon can read story reports';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.story_reports (kind, report) values ('summary', '{}'::jsonb);
+    raise exception 'anon wrote a story report directly';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 
 reset role;

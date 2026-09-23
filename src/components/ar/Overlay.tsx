@@ -11,7 +11,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { Product } from "@/config/products";
 import { PROCEDURAL_ASPECT, drawProduct, peekImage, placeProduct } from "./drawMerch";
-import { mapPose, type Landmarks, type ScreenPose } from "./landmarks";
+import { mapPose, type Landmarks, type PersonSpot, type ScreenPose } from "./landmarks";
 
 interface OverlayProps {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -23,6 +23,8 @@ interface OverlayProps {
   canvasRef?: RefObject<HTMLCanvasElement | null>;
   /** Fires only when the "pinned to centre" vs "on the person" state flips. */
   onAnchoredChange?: (anchored: boolean) => void;
+  /** Receives where the person is each frame, for Kitty to sit beside them. */
+  personRef?: RefObject<PersonSpot | null>;
 }
 
 export default function Overlay({
@@ -33,6 +35,7 @@ export default function Overlay({
   mirrored,
   canvasRef,
   onAnchoredChange,
+  personRef,
 }: OverlayProps) {
   const localRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -84,6 +87,13 @@ export default function Overlay({
       if (lm && video && video.videoWidth > 0 && video.videoHeight > 0) {
         pose = mapPose(lm, video.videoWidth, video.videoHeight, cw, ch, mirrored);
       }
+      if (personRef && pose && pose.leftShoulder.v > 0.5 && pose.rightShoulder.v > 0.5) {
+        personRef.current = {
+          x: (pose.leftShoulder.x + pose.rightShoulder.x) / 2,
+          shoulderW: Math.abs(pose.leftShoulder.x - pose.rightShoulder.x),
+          at: performance.now(),
+        };
+      }
 
       const img = peekImage(product.images.front);
       const aspect = img ? img.naturalHeight / img.naturalWidth : fallbackAspect;
@@ -106,7 +116,7 @@ export default function Overlay({
       if (ro) ro.disconnect();
       else window.removeEventListener("resize", fit);
     };
-  }, [videoRef, landmarks, product, colour, mirrored, onAnchoredChange]);
+  }, [videoRef, landmarks, product, colour, mirrored, onAnchoredChange, personRef]);
 
   return (
     <canvas
