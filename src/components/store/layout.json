@@ -1,0 +1,90 @@
+{
+  "_about": "The living room and garden at Kitty's (Pacific Wharf), from Felix's photos of 23 Sep 2026. Metres; y up; the visitor stands at +z (the dining end) looking towards -z (the patio door). Read by the site (spots.ts, Kitty's paths) and by the Blender build (scripts/room/room.py), so the room and where Kitty walks always agree.",
+  "room": { "left": -2.1, "right": 2.1, "back": -3.2, "front": 3.4, "height": 2.5 },
+  "patioDoor": { "x0": -1.95, "x1": -0.55, "height": 2.1, "openFrom": -1.25 },
+  "camera": { "position": [0.25, 1.5, 3], "look": [0.1, 0.7, -0.85] },
+  "furniture": {
+    "sofa": { "x0": -0.6, "x1": 1.55, "z0": -3.15, "z1": -2.3, "chaiseX0": 0.75, "chaiseZ1": -1.45, "seat": 0.44, "back": 0.84 },
+    "ottoman": { "x0": 0.85, "x1": 1.45, "z0": -1.32, "z1": -0.84, "height": 0.42 },
+    "coffeeTable": { "x0": -0.3, "x1": 0.75, "z0": -1.98, "z1": -1.43, "height": 0.42 },
+    "rug": { "x": 0.25, "z": -1.55, "width": 2, "depth": 1.42 },
+    "recliner": { "x": 1.3, "z": -0.3, "yaw": -2.55 },
+    "bookcase": { "x0": 1.78, "x1": 2.08, "z0": -2.25, "z1": -0.55, "height": 0.9 },
+    "poster": { "z": -1.45, "y": 1.64, "width": 1.45, "height": 0.83 },
+    "maze": { "x": 1.55, "y": 1.66, "width": 0.42, "height": 0.504 },
+    "pink": { "z": -0.28, "y": 1.72, "width": 0.24, "height": 0.42 },
+    "capRack": { "x": 0.22, "y": 1.3 },
+    "bench": { "z0": -2.45, "z1": -1.35, "depth": 0.3, "height": 0.36 },
+    "maps": { "z": -1.9, "y": 1.9, "width": 1.3, "height": 0.213 },
+    "botanical": { "z": 0.55, "y": 1.62, "width": 0.3, "height": 0.54 },
+    "coats": { "z": -2.85 },
+    "hallDoor": { "z0": 0.05, "z1": 0.87, "height": 2, "open": 0.45 },
+    "bin": { "x": 1.86, "z": 1.12 },
+    "catTree": { "x": 1.62, "z": 1.72 },
+    "koiRug": { "x": 0.75, "z": 2.25, "yaw": 0.35, "length": 1.7, "width": 0.62 },
+    "diningTable": { "x": -1.35, "z": 2.35, "width": 0.9, "length": 1.5 }
+  },
+  "uplighters": [
+    { "wall": "back", "x": 0.95, "y": 1.95 },
+    { "wall": "right", "z": -0.28, "y": 2.02 },
+    { "wall": "left", "z": -0.6, "y": 1.95 }
+  ],
+  "garden": {
+    "x0": -2.45,
+    "x1": 0.45,
+    "z0": -3.2,
+    "z1": -9,
+    "wall": 1.9,
+    "gate": { "x0": -1.55, "x1": -0.65, "height": 1.85, "open": 1.1 },
+    "planter": { "x0": -0.2, "x1": 0.4, "z0": -8.6, "z1": -4.6, "height": 0.6 },
+    "path": { "z1": -12.5, "rail": -12.2 },
+    "lamps": [[ -2.9, -10.6 ], [ 1.2, -10.8 ]]
+  },
+  "backdrop": { "z": -26, "width": 44, "height": 18, "y": 3.2, "horizonY": 1.7, "bankRepeats": 2 },
+  "spots": {
+    "cap": {
+      "position": [0.05, 0, -0.95],
+      "yaw": 0.25,
+      "product": [0.25, 0.86, -1.7],
+      "surfaceY": 0.42,
+      "camera": [-0.35, 1.42, 1.2],
+      "look": [0.12, 0.5, -1.2],
+      "glow": 0.22
+    },
+    "hoodie": {
+      "position": [1.15, 0.42, -1.08],
+      "yaw": -0.55,
+      "approach": [0.62, 0, -0.9],
+      "product": [1.12, 1.2, -1.95],
+      "surfaceY": 0.44,
+      "camera": [0.05, 1.45, 0.75],
+      "look": [1.05, 0.85, -1.55]
+    },
+    "longsleeve": {
+      "position": [-0.95, 0, -2.35],
+      "yaw": 0.35,
+      "product": [-1.45, 1.05, -2.7],
+      "surfaceY": 0,
+      "camera": [-0.45, 1.4, 0.45],
+      "look": [-1.05, 0.72, -2.4]
+    }
+  },
+  "pois": [
+    { "position": [-0.95, 0, -2.95], "yaw": 3.14159, "line": "The river's out there. I keep an eye on it." },
+    { "position": [1.05, 0, 1.62], "yaw": 1.5708, "line": "My tower. They think they bought it for themselves." },
+    { "position": [0.6, 0, -1.02], "yaw": 0.6, "line": "This is the good bit of rug." }
+  ],
+  "obstacles": [
+    { "name": "sofa", "x0": -0.6, "x1": 1.55, "z0": -3.2, "z1": -2.3 },
+    { "name": "chaise", "x0": 0.75, "x1": 1.55, "z0": -2.3, "z1": -1.45 },
+    { "name": "ottoman", "x0": 0.85, "x1": 1.45, "z0": -1.32, "z1": -0.84 },
+    { "name": "coffeeTable", "x0": -0.3, "x1": 0.75, "z0": -1.98, "z1": -1.43 },
+    { "name": "recliner", "x0": 0.88, "x1": 1.78, "z0": -0.74, "z1": 0.16 },
+    { "name": "bookcase", "x0": 1.78, "x1": 2.1, "z0": -2.25, "z1": -0.55 },
+    { "name": "bench", "x0": -2.1, "x1": -1.8, "z0": -2.45, "z1": -1.35 },
+    { "name": "coats", "x0": -2.1, "x1": -1.7, "z0": -3.2, "z1": -2.6 },
+    { "name": "catTree", "x0": 1.35, "x1": 1.95, "z0": 1.45, "z1": 2 },
+    { "name": "bin", "x0": 1.7, "x1": 2.05, "z0": 0.95, "z1": 1.3 },
+    { "name": "diningTable", "x0": -1.85, "x1": -0.4, "z0": 1.55, "z1": 3.15 }
+  ]
+}

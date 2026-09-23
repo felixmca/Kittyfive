@@ -1,9 +1,11 @@
 /**
- * Living-room layout and Kitty's presentation spots.
+ * Living-room layout and Kitty's presentation spots, read from layout.json
+ * (the same numbers the Blender build uses for the room, so where she walks
+ * and what is in the way always agree).
  *
- * Units are metres. The floor is y = 0, the window is on the back wall at -z
- * and the visitor stands at the doorway at +z looking in. Yaw follows
- * three.js: 0 faces +z (toward the doorway), positive turns toward +x, so a
+ * Units are metres. The floor is y = 0; the visitor stands at the dining end
+ * (+z) looking towards the patio door and the garden (-z). Yaw follows
+ * three.js: 0 faces +z (towards the visitor), positive turns toward +x, so a
  * heading (dx, dz) is Math.atan2(dx, dz).
  *
  * Each spot carries a camera vantage point too: when Kitty walks to a spot the
@@ -13,6 +15,7 @@
  * snaps.
  */
 import type { ProductId } from "@/config/products";
+import layout from "./layout.json";
 
 export type Vec3 = [number, number, number];
 
@@ -22,59 +25,52 @@ export interface Spot {
   position: Vec3;
   /** Which way she faces once she has arrived. */
   yaw: number;
+  /** For a spot up on the furniture: the floor point she jumps up from. */
+  approach?: Vec3;
   /** Where the product floats. */
   product: Vec3;
-  /** Height of the surface under the product (floor or counter top). */
+  /** Height of the surface under the product (floor, table, sofa). */
   surfaceY: number;
+  /** Radius of the glow under the product (smaller on a small table). */
+  glow?: number;
   /** Camera vantage point and look target once she has arrived. */
   camera: Vec3;
   look: Vec3;
 }
 
+/** A rectangle of floor Kitty walks round (x0 < x1, z0 < z1). */
+export interface Obstacle {
+  name: string;
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+
 export const ROOM = {
-  left: -3,
-  right: 3,
-  backZ: -2.6,
-  frontZ: 3.4,
-  height: 2.7,
-  counterHeight: 0.9,
+  left: layout.room.left,
+  right: layout.room.right,
+  backZ: layout.room.back,
+  frontZ: layout.room.front,
+  height: layout.room.height,
 } as const;
 
-/** Where a person stands when they first step through the door. */
+export const LAYOUT = layout;
+
+/** Where a person stands when they first step in from the dining end. */
 export const DOORWAY_CAMERA = {
-  position: [0.2, 1.5, 3.0] as Vec3,
-  look: [0, 0.6, -0.4] as Vec3,
+  position: layout.camera.position as Vec3,
+  look: layout.camera.look as Vec3,
 };
 
-export const SPOTS: Spot[] = [
-  {
-    id: "cap",
-    position: [-1.5, 0, 0.9],
-    yaw: 0.45,
-    product: [-0.85, 0.9, 0.85],
-    surfaceY: 0,
-    camera: [-0.1, 1.4, 2.7],
-    look: [-1.1, 0.45, 0.9],
-  },
-  {
-    id: "hoodie",
-    position: [2.6, ROOM.counterHeight, -0.5],
-    yaw: -0.5,
-    product: [1.95, 1.5, -0.4],
-    surfaceY: ROOM.counterHeight,
-    camera: [1.3, 1.5, 1.2],
-    look: [2.3, 1.15, -0.45],
-  },
-  {
-    id: "longsleeve",
-    position: [0.4, 0, -1.7],
-    yaw: 0.1,
-    product: [1.05, 0.9, -1.6],
-    surfaceY: 0,
-    camera: [0.3, 1.35, 0.6],
-    look: [0.75, 0.5, -1.65],
-  },
-];
+const ORDER: ProductId[] = ["cap", "hoodie", "longsleeve"];
+
+export const SPOTS: Spot[] = ORDER.map((id) => {
+  const s = layout.spots[id] as Omit<Spot, "id">;
+  return { id, ...s };
+});
+
+export const OBSTACLES: Obstacle[] = layout.obstacles;
 
 export function wrapIndex(index: number, length: number): number {
   return ((Math.trunc(index) % length) + length) % length;
@@ -87,13 +83,14 @@ export function spotFor(index: number): Spot {
 
 /**
  * Where Kitty wanders when nobody needs her (Kitty.tsx), and what she says
- * there. The garden door is in the back wall (Garden.tsx: x -1.9).
+ * there: the open patio door (the river beyond the garden), her cat tree,
+ * the good bit of rug.
  */
-export const POINTS_OF_INTEREST: { position: Vec3; yaw: number; line: string }[] = [
-  { position: [0.25, 0, -2.1], yaw: Math.PI, line: "The river. I keep an eye on it." },
-  { position: [-1.9, 0, -2.15], yaw: Math.PI, line: "The garden. Mostly mine." },
-  { position: [-0.5, 0, 0.35], yaw: 0.6, line: "This is the good bit of rug." },
-];
+export const POINTS_OF_INTEREST: { position: Vec3; yaw: number; line: string }[] = layout.pois.map((p) => ({
+  position: p.position as Vec3,
+  yaw: p.yaw,
+  line: p.line,
+}));
 
 /** Kitty's walking pace, m/s. */
 export const WALK_SPEED = 0.6;

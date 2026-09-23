@@ -4,14 +4,15 @@
  * them from useFrame; the model underneath (GLB if /models/kitty.glb exists,
  * otherwise the procedural cat) reads the shared KittyMotion record.
  *
- * Behaviour: on productIndex change she turns toward the new spot, walks there
- * in a straight line at WALK_SPEED (with a small hop when the spot is higher,
- * e.g. the kitchen counter), turns to the spot's facing yaw, sits, and the
- * speech bubble shows the product's pitch.
+ * Behaviour: on productIndex change she turns toward the new spot and walks
+ * there at WALK_SPEED, round the furniture rather than through it (paths.ts),
+ * jumping up when the spot is on the furniture (the ottoman) from its floor
+ * approach point, and down again before she next walks anywhere. She turns to
+ * the spot's facing yaw, sits, and the speech bubble shows the product's pitch.
  *
  * Left alone for a while (no product change, chat closed), she wanders off
- * like a cat: to the window, then the garden door, then the rug, one at a
- * time. She sits there, says something about it (storeState.poiLine), and
+ * like a cat: to the open patio door, then her cat tree, then the rug, one at
+ * a time. She sits there, says something about it (storeState.poiLine), and
  * walks back to the product she was showing. Any tap on the arrows brings
  * her straight to the new product. Never under reduced motion.
  */
@@ -25,6 +26,7 @@ import SceneErrorBoundary from "./SceneErrorBoundary";
 import SpeechBubble from "./SpeechBubble";
 import { useAssetExists } from "./useAssetExists";
 import { angleDelta, createMotion, prefersReducedMotion, type KittyMotion } from "./motion";
+import { route } from "./paths";
 import { POINTS_OF_INTEREST, SPOTS, TURN_SPEED, WALK_SPEED, spotFor, type Vec3 } from "./spots";
 import { kittyTrack, useStoreState } from "./storeState";
 
@@ -40,6 +42,8 @@ type Mode = "idle" | "turning" | "walking" | "settling";
 interface Goal {
   position: Vec3;
   yaw: number;
+  /** For a goal up on the furniture: the floor point she jumps from. */
+  approach?: Vec3;
 }
 
 interface Walker {
@@ -55,9 +59,33 @@ interface Walker {
   idle: number;
   /** Which point of interest is next. */
   nextPoi: number;
+  /** The waypoints still to walk; the last is the goal itself. */
+  legs: THREE.Vector3[];
   start: THREE.Vector3;
   totalDist: number;
   hop: number;
+  /** While up on the furniture: the floor point to jump down to first. */
+  perch: Vec3 | null;
+}
+
+/** Waypoints from where she is to the goal: down off any furniture, round the rest, up at the end. */
+function planLegs(w: Walker, goal: Goal): THREE.Vector3[] {
+  const legs: Vec3[] = [];
+  let from: Vec3 = [w.pos.x, 0, w.pos.z];
+  if (w.perch && w.pos.y > 0.2) {
+    legs.push(w.perch);
+    from = w.perch;
+  }
+  legs.push(...route(from, goal.approach ?? goal.position));
+  if (goal.approach) legs.push(goal.position);
+  return legs.map((p) => new THREE.Vector3(...p));
+}
+
+/** Set off for a new goal. */
+function head(w: Walker, goal: Goal) {
+  w.target = goal;
+  w.legs = planLegs(w, goal);
+  w.mode = "turning";
 }
 
 export default function Kitty() {
@@ -81,9 +109,11 @@ export default function Kitty() {
       poi: -1,
       idle: 0,
       nextPoi: 0,
+      legs: [],
       start: new THREE.Vector3(...spot.position),
       totalDist: 0,
       hop: 0,
+      perch: spot.position[1] > 0.2 ? (spot.approach ?? null) : null,
     };
   }
 
@@ -98,22 +128,24 @@ export default function Kitty() {
     if (!w) return;
     const spot = spotFor(productIndex);
     if (spot === w.target && w.mode === "idle") return;
-    w.target = spot;
     w.targetIndex = productIndex;
     w.poi = -1;
     w.idle = 0;
     useStoreState.getState().setPoiLine(null);
     useStoreState.getState().setWanderTo(null);
     if (prefersReducedMotion()) {
+      w.target = spot;
+      w.legs = [];
       w.pos.set(...spot.position);
       w.yaw = spot.yaw;
+      w.perch = spot.position[1] > 0.2 ? (spot.approach ?? null) : null;
       w.mode = "idle";
       motion.current.moving = false;
       motion.current.speed = 0;
       useStoreState.getState().noteArrival(productIndex);
       return;
     }
-    w.mode = "turning";
+    head(w, spot);
     useStoreState.getState().setArrivedIndex(null);
   }, [productIndex]);
 
@@ -123,12 +155,21 @@ export default function Kitty() {
     if (!w || !g) return;
     const dt = Math.min(rawDt, 0.1);
     const m = motion.current;
-    goal.set(...w.target.position);
+    if (w.legs.length) goal.copy(w.legs[0]);
+    else goal.set(...w.target.position);
 
     if (w.mode === "turning") {
       dir.copy(goal).sub(w.pos);
-      if (Math.hypot(dir.x, dir.z) < 0.02) {
+      if (!w.legs.length) {
         w.mode = "settling";
+      } else if (Math.hypot(dir.x, dir.z) < 0.02) {
+        // Straight up or down: no need to face anywhere first.
+        w.mode = "walking";
+        w.start.copy(w.pos);
+        w.totalDist = w.pos.distanceTo(goal);
+        w.hop = Math.abs(goal.y - w.pos.y) > 0.2 ? 0.14 : 0;
+        m.moving = true;
+        m.speed = WALK_SPEED;
       } else {
         const want = Math.atan2(dir.x, dir.z);
         const d = angleDelta(w.yaw, want);
@@ -151,9 +192,16 @@ export default function Kitty() {
       const step = WALK_SPEED * dt;
       if (dist <= step || w.totalDist <= 0) {
         w.pos.copy(goal);
-        w.mode = "settling";
-        m.moving = false;
-        m.speed = 0;
+        w.legs.shift();
+        if (w.legs.length) {
+          // Round the next corner (or up onto the furniture).
+          w.mode = "turning";
+        } else {
+          w.mode = "settling";
+          m.moving = false;
+          m.speed = 0;
+          w.perch = w.pos.y > 0.2 ? (w.target.approach ?? null) : null;
+        }
       } else {
         dir.normalize().multiplyScalar(step);
         w.pos.add(dir);
@@ -177,15 +225,13 @@ export default function Kitty() {
       const busy = useUi.getState().chatOpen || useStoreState.getState().panelOpen;
       if (w.poi >= 0 && w.idle > WANDER_STAY) {
         w.poi = -1;
-        w.target = spotFor(w.targetIndex);
-        w.mode = "turning";
+        head(w, spotFor(w.targetIndex));
         useStoreState.getState().setPoiLine(null);
         useStoreState.getState().setWanderTo(null);
       } else if (w.poi < 0 && w.idle > WANDER_AFTER && !busy) {
         w.poi = w.nextPoi;
         w.nextPoi = (w.nextPoi + 1) % POINTS_OF_INTEREST.length;
-        w.target = POINTS_OF_INTEREST[w.poi];
-        w.mode = "turning";
+        head(w, POINTS_OF_INTEREST[w.poi]);
         useStoreState.getState().setArrivedIndex(null);
         useStoreState.getState().setWanderTo(POINTS_OF_INTEREST[w.poi].position);
       }

@@ -83,8 +83,8 @@ export default function FloatingProduct() {
 
   return (
     <group>
-      {/* Glow on the surface under the product */}
-      <group position={[spot.product[0], spot.surfaceY + 0.006, spot.product[2]]}>
+      {/* Glow on the surface under the product (smaller on a small table) */}
+      <group position={[spot.product[0], spot.surfaceY + 0.006, spot.product[2]]} scale={(spot.glow ?? 0.34) / 0.34}>
         <mesh ref={glow} rotation-x={-Math.PI / 2}>
           <circleGeometry args={[0.34, 40]} />
           <meshBasicMaterial

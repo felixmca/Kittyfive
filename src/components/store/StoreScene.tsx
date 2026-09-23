@@ -6,7 +6,10 @@
  *
  * The light is day or evening (as it is at Kitty's in London, or as the
  * visitor flips it): <AmbienceClock/> eases the shared ambience record and
- * <Lights/> follows it, with the river window and the garden, every frame.
+ * <Lights/> follows it, with the river, the lamps and the garden, every frame.
+ * By day the light comes from the dining-end windows behind the visitor and
+ * through the patio door; in the evening from the wicker lamp, the
+ * uplighters and the festoon lights in the garden.
  */
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -63,7 +66,6 @@ export default function StoreScene() {
         />
       ) : null}
       <color attach="background" args={[BG]} />
-      <fog attach="fog" args={[BG, 9, 22]} />
       <AmbienceClock reduced={reduced} />
       <Lights />
       <SceneErrorBoundary fallback={<FloorOnly />} label="room">
@@ -144,28 +146,35 @@ function PerfProbe() {
 
 /** Day and evening versions of every light: [day, evening]. */
 const LIGHT = {
-  ambient: { intensity: [0.5, 0.2], color: ["#ffe9d2", "#ffcf9e"] },
-  hemi: { intensity: [0.6, 0.22], sky: ["#9fc5ff", "#3b3f78"], ground: ["#3a2a20", "#24160f"] },
-  river: { intensity: [2.2, 0.55], color: ["#cfe3ff", "#6f76c9"] },
-  lamp: { intensity: [7, 13], color: ["#ffd9a0", "#ffc27a"] },
-  counter: { intensity: [3.5, 5.5], color: ["#fff1dc", "#ffd8a8"] },
+  ambient: { intensity: [0.45, 0.16], color: ["#fff3e6", "#ffd2a8"] },
+  hemi: { intensity: [0.55, 0.2], sky: ["#dfe9ff", "#33407a"], ground: ["#8a6a4a", "#2a1c12"] },
+  key: { intensity: [2.1, 0.2], color: ["#fff6ea", "#9aa4d6"] },
+  garden: { intensity: [1.1, 0.22], color: ["#dbe8ff", "#5a67b8"] },
+  lamp: { intensity: [1.2, 8], color: ["#ffd9a0", "#ffbf73"] },
+  uplight: { intensity: [0.6, 6], color: ["#ffe7c4", "#ffc98a"] },
+  festoon: { intensity: [0, 5], color: ["#ffe2b0", "#ffcf85"] },
 } as const;
 
 function Lights() {
   const amb = useRef<THREE.AmbientLight>(null);
   const hemi = useRef<THREE.HemisphereLight>(null);
-  const river = useRef<THREE.DirectionalLight>(null);
+  const key = useRef<THREE.DirectionalLight>(null);
+  const garden = useRef<THREE.DirectionalLight>(null);
   const lamp = useRef<THREE.PointLight>(null);
-  const counter = useRef<THREE.PointLight>(null);
+  const upRight = useRef<THREE.PointLight>(null);
+  const upBack = useRef<THREE.PointLight>(null);
+  const festoon = useRef<THREE.PointLight>(null);
   const colors = useMemo(() => {
     const pair = (p: readonly [string, string]) => [new THREE.Color(p[0]), new THREE.Color(p[1])] as const;
     return {
       ambient: pair(LIGHT.ambient.color),
       sky: pair(LIGHT.hemi.sky),
       ground: pair(LIGHT.hemi.ground),
-      river: pair(LIGHT.river.color),
+      key: pair(LIGHT.key.color),
+      garden: pair(LIGHT.garden.color),
       lamp: pair(LIGHT.lamp.color),
-      counter: pair(LIGHT.counter.color),
+      uplight: pair(LIGHT.uplight.color),
+      festoon: pair(LIGHT.festoon.color),
     };
   }, []);
   const last = useRef(-1);
@@ -184,9 +193,12 @@ function Lights() {
       light.color.lerpColors(color[0], color[1], e);
     };
     set(amb.current, LIGHT.ambient.intensity, colors.ambient);
-    set(river.current, LIGHT.river.intensity, colors.river);
+    set(key.current, LIGHT.key.intensity, colors.key);
+    set(garden.current, LIGHT.garden.intensity, colors.garden);
     set(lamp.current, LIGHT.lamp.intensity, colors.lamp);
-    set(counter.current, LIGHT.counter.intensity, colors.counter);
+    set(upRight.current, LIGHT.uplight.intensity, colors.uplight);
+    set(upBack.current, LIGHT.uplight.intensity, colors.uplight);
+    set(festoon.current, LIGHT.festoon.intensity, colors.festoon);
     const h = hemi.current;
     if (h) {
       h.intensity = lerp(LIGHT.hemi.intensity[0], LIGHT.hemi.intensity[1], e);
@@ -197,14 +209,18 @@ function Lights() {
 
   return (
     <>
-      <ambientLight ref={amb} intensity={0.5} color="#ffe9d2" />
-      <hemisphereLight ref={hemi} args={["#9fc5ff", "#3a2a20", 0.6]} />
-      {/* River light through the window, from behind the back wall */}
-      <directionalLight ref={river} position={[0.2, 2.4, -6]} intensity={2.2} color="#cfe3ff" />
-      {/* Warm floor lamp by the sofa */}
-      <pointLight ref={lamp} position={[-2.6, 1.5, -1.1]} intensity={7} color="#ffd9a0" distance={8} decay={2} />
-      {/* Soft light over the kitchen counter */}
-      <pointLight ref={counter} position={[2.4, 1.9, -0.9]} intensity={3.5} color="#fff1dc" distance={6} decay={2} />
+      <ambientLight ref={amb} intensity={0.45} color="#fff3e6" />
+      <hemisphereLight ref={hemi} args={["#dfe9ff", "#8a6a4a", 0.55]} />
+      {/* Daylight from the windows at the dining end, behind the visitor */}
+      <directionalLight ref={key} position={[1.8, 3.6, 5.5]} intensity={2.1} color="#fff6ea" />
+      {/* ... and from the garden, through the patio door */}
+      <directionalLight ref={garden} position={[-1.2, 3.2, -8]} intensity={1.1} color="#dbe8ff" />
+      {/* The wicker lamp on the bookcase, and two of the uplighters */}
+      <pointLight ref={lamp} position={[1.86, 1.15, -0.83]} intensity={1.2} color="#ffd9a0" distance={5} decay={2} />
+      <pointLight ref={upRight} position={[1.92, 2.25, -0.28]} intensity={0.6} color="#ffe7c4" distance={4.5} decay={2} />
+      <pointLight ref={upBack} position={[0.95, 2.25, -3.0]} intensity={0.6} color="#ffe7c4" distance={4.5} decay={2} />
+      {/* The festoon lights along the garden fence */}
+      <pointLight ref={festoon} position={[0.1, 1.6, -6.2]} intensity={0} color="#ffe2b0" distance={4.5} decay={2} />
     </>
   );
 }
@@ -215,11 +231,25 @@ const HANDS_OFF_MS = 20_000;
 const FOLLOW = 0.55;
 /** Her middle, above the floor, for the camera to look at. */
 const KITTY_HEIGHT = 0.3;
+/**
+ * A portrait phone sees a narrow slice of the room, so at each spot the
+ * camera stands this much further back along its line of sight (Kitty and
+ * the product both fit, with some of the room round them).
+ */
+const PORTRAIT_BACK = 1.45;
+
+function vantage(spot: { camera: readonly number[]; look: readonly number[] }, portrait: boolean, out: THREE.Vector3) {
+  const [cx, cy, cz] = spot.camera;
+  const [lx, ly, lz] = spot.look;
+  const k = portrait ? PORTRAIT_BACK : 1;
+  return out.set(lx + (cx - lx) * k, ly + (cy - ly) * k, lz + (cz - lz) * k);
+}
 
 function CameraRig({ reduced }: { reduced: boolean }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
+  const portrait = size.width < size.height;
   const productIndex = useUi((s) => s.productIndex);
   const wanderTo = useStoreState((s) => s.wanderTo);
   const anim = useRef({
@@ -254,7 +284,7 @@ function CameraRig({ reduced }: { reduced: boolean }) {
   useEffect(() => {
     const spot = spotFor(productIndex);
     const a = anim.current;
-    a.pos.set(...spot.camera);
+    vantage(spot, portrait, a.pos);
     a.goal.set(...spot.look);
     a.look.copy(a.goal);
     if (reduced) {
@@ -268,7 +298,7 @@ function CameraRig({ reduced }: { reduced: boolean }) {
     } else {
       a.active = true;
     }
-  }, [productIndex, reduced, camera]);
+  }, [productIndex, reduced, camera, portrait]);
 
   // When Kitty wanders off, glance after her (the camera stays where it is and
   // turns); when she comes back, look at her product again. Never while the
@@ -280,11 +310,11 @@ function CameraRig({ reduced }: { reduced: boolean }) {
     a.pos.copy(camera.position);
     if (wanderTo) a.goal.set(wanderTo[0], 0.35, wanderTo[2]);
     else {
-      a.pos.set(...spot.camera);
+      vantage(spot, portrait, a.pos);
       a.goal.set(...spot.look);
     }
     a.active = true;
-  }, [wanderTo, reduced, camera]);
+  }, [wanderTo, reduced, camera, portrait]);
 
   useFrame((_, rawDt) => {
     const a = anim.current;
@@ -324,7 +354,7 @@ function CameraRig({ reduced }: { reduced: boolean }) {
       minAzimuthAngle={-deg(35)}
       maxAzimuthAngle={deg(35)}
       minDistance={1.2}
-      maxDistance={4}
+      maxDistance={portrait ? 4.8 : 4}
       onStart={() => {
         // The visitor took over; stop steering the camera.
         anim.current.active = false;
