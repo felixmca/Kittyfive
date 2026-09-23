@@ -393,7 +393,7 @@ send is used up for nothing.
   (`delete_my_account()`, covered by the RLS smoke test).
 - **Accessibility:** an axe check (WCAG 2.1 AA and best practices) is now
   part of `npm run verify`, over every page and with the menu and the chat
-  open. It is clean; five small fixes came out of it.
+  open. It is clean; six small fixes came out of it.
 - **Search engines:** `robots.txt` and `sitemap.xml` (every published
   chapter, updated hourly; the account, admin and email pages kept out).
 - **A privacy notice draft** for before the first email:
