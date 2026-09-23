@@ -34,6 +34,8 @@ const NUMBERS = [
   "memory",
   "t",
   "flushes",
+  "waitMs",
+  "skips",
 ];
 const BOOLEANS = ["started", "splash", "reduced", "standalone", "drawFailed", "crashedBefore", "released"];
 

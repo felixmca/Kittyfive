@@ -21,6 +21,8 @@ interface Row {
     furthest?: number;
     peakDecoded?: number;
     broken?: number;
+    waitMs?: number;
+    skips?: number;
     crashedBefore?: boolean;
     errors?: string[];
     standalone?: boolean;
@@ -115,6 +117,8 @@ export default function StoryReports({ live }: { live: boolean }) {
                     : "did not start"}
                 {typeof x.peakDecoded === "number" ? ` · ${x.peakDecoded} frames held` : ""}
                 {x.broken ? ` · ${x.broken} broken` : ""}
+                {x.waitMs && x.waitMs >= 500 ? ` · waited ${(x.waitMs / 1000).toFixed(1)} s for frames` : ""}
+                {x.skips ? ` · played past ${x.skips} missing` : ""}
                 {x.crashedBefore ? " · the visit before crashed" : ""}
                 {x.screen ? ` · ${x.screen}` : ""}
               </span>

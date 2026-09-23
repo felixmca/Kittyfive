@@ -25,6 +25,9 @@ export interface ReportState {
   t: number;
   furthest: number;
   media: { decoded: number; peak: number; finals: number; fetched: number; broken: number };
+  /** Milliseconds playback spent waiting for frames, and how often it played on past a missing one. */
+  waitMs: number;
+  skips: number;
 }
 
 function wanted(): boolean {
@@ -178,6 +181,8 @@ export class StoryReport {
       finals: s?.media.finals,
       fetched: s?.media.fetched,
       broken: s?.media.broken,
+      waitMs: s ? Math.round(s.waitMs) : undefined,
+      skips: s?.skips,
       drawFailed: this.drawFailed,
       crashedBefore: this.crashedBefore,
       visibleMs: Math.round(this.shownMs()),

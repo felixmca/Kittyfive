@@ -139,6 +139,9 @@ export class SwipeEngine {
   private waitingSince = 0;
   /** After patience runs out, play on without waiting until then (past the gap). */
   private freeUntil = 0;
+  /** For the story report: time spent waiting for frames, and plays past a missing one. */
+  private waitMs = 0;
+  private skips = 0;
   private announced = -1;
   private destroyed = false;
   private cleanups: (() => void)[] = [];
@@ -157,6 +160,8 @@ export class SwipeEngine {
       t: this.t,
       furthest: this.furthest,
       media: this.media.stats(),
+      waitMs: this.waitMs,
+      skips: this.skips,
     }));
   }
 
@@ -333,8 +338,10 @@ export class SwipeEngine {
         else if (now - this.waitingSince >= FRAME_PATIENCE_MS) {
           this.waitingSince = 0;
           this.freeUntil = now + 1000;
+          this.skips++;
           this.t = next;
         }
+        this.waitMs += dt * 1000;
         again = true;
       } else {
         this.waitingSince = 0;
