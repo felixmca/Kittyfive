@@ -70,8 +70,9 @@ interface Hold {
   t0: number;
   x0: number;
   y0: number;
-  /** Seconds one screen of drag moves through. */
-  seconds: number;
+  /** Seconds one screen of drag moves through, backwards and forwards. */
+  back: number;
+  fwd: number;
   wasHeading: number | null;
 }
 
@@ -302,14 +303,20 @@ export class SwipeEngine {
     this.updateResidency();
   }
 
-  /** Keep frames decoded for the chapter being watched and its neighbours. */
+  /**
+   * Keep frames decoded only where they can be seen: the chapter under the
+   * playhead, the one it is heading for, and the next one (preloading). A
+   * chapter's final frame is kept separately, so flights and stops never need
+   * the whole clip of the chapter before. (A decoded 576×1024 clip is ~170 MB.)
+   */
   private updateResidency(): void {
     const tl = this.tl;
     if (!tl || this.reduced) return;
+    const here = spanIndexAt(tl, this.t);
     const focus = spanIndexAt(tl, this.target ?? this.t);
     tl.spans.forEach((s, i) => {
-      const d = i - focus;
-      this.media.setResident(i, d >= -1 && d <= 1, Math.abs(d));
+      const on = i === here || i === focus || i === focus + 1;
+      this.media.setResident(i, on, Math.abs(i - focus));
     });
   }
 
@@ -666,23 +673,16 @@ export class SwipeEngine {
     const tl = this.tl;
     if (!g || g.moved || !g.onStage || !tl || !this.started || this.released) return;
     g.held = true;
-    // One screen of drag ≈ the stretch between the stops around the playhead.
+    // One screen of drag ≈ one chapter: the stretch between the stops the
+    // playhead sits between (on a stop, the chapter behind for dragging back
+    // and the one ahead for dragging on).
     const bounds = [0, ...tl.stops];
-    let a = 0;
-    let b = tl.end;
-    for (let k = 0; k < bounds.length - 1; k++) {
-      if (this.t <= bounds[k + 1] + 1e-3) {
-        a = bounds[k];
-        b = bounds[k + 1];
-        if (this.target !== null && this.target > this.t) break;
-        if (Math.abs(this.t - bounds[k + 1]) < 1e-3 && k + 2 < bounds.length) {
-          a = bounds[k + 1];
-          b = bounds[k + 2];
-        }
-        break;
-      }
-    }
-    this.hold = { t0: this.t, x0: g.x, y0: g.y, seconds: Math.max(2, b - a), wasHeading: this.target };
+    const prev = [...bounds].reverse().find((b) => b < this.t - 1e-3) ?? 0;
+    const next = bounds.find((b) => b > this.t + 1e-3) ?? tl.end;
+    const onStop = bounds.find((b) => Math.abs(b - this.t) <= 1e-3);
+    const back = onStop !== undefined ? this.t - prev : next - prev;
+    const fwd = onStop !== undefined ? next - this.t : next - prev;
+    this.hold = { t0: this.t, x0: g.x, y0: g.y, back: Math.max(2, back), fwd: Math.max(2, fwd), wasHeading: this.target };
     this.setHint(false);
     this.els.stage.dataset.holding = "true";
     this.kick();
@@ -694,7 +694,9 @@ export class SwipeEngine {
     const tl = this.tl;
     if (!g || !h || !tl) return;
     const d = (g.x - h.x0 - (g.y - h.y0)) / Math.max(240, this.layout.view.h);
-    this.t = clamp(h.t0 + d * h.seconds, 0, tl.end);
+    this.t = clamp(h.t0 + d * (d < 0 ? h.back : h.fwd), 0, tl.end);
+    // Scrubbing back into a chapter whose frames were let go loads them again.
+    this.updateResidency();
     this.kick();
   }
 
