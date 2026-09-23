@@ -24,6 +24,8 @@ interface ChatMessage {
 
 const MAX_TURNS = 12;
 const FALLBACK = "The wifi fell in the river. Ask me again in a moment.";
+/** No bytes of her reply for this long (ms): stop waiting. Her replies start within a few seconds. */
+const STALL_MS = 25_000;
 let nextId = 1;
 
 function trimTurns<T>(list: T[]): T[] {
@@ -92,6 +94,19 @@ export default function ChatDock() {
 
     const ac = new AbortController();
     abortRef.current = ac;
+    // A reply that stops arriving (a phone losing signal mid-stream) must not
+    // leave the chat "typing" forever: no bytes for this long ends the wait.
+    let stalled = false;
+    let watchdog = 0;
+    const arm = () => {
+      window.clearTimeout(watchdog);
+      watchdog = window.setTimeout(() => {
+        stalled = true;
+        ac.abort();
+      }, STALL_MS);
+    };
+    let acc = "";
+    arm();
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -106,8 +121,8 @@ export default function ChatDock() {
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let acc = "";
       for (;;) {
+        arm();
         const { value, done } = await reader.read();
         if (done) break;
         acc += decoder.decode(value, { stream: true });
@@ -118,9 +133,13 @@ export default function ChatDock() {
       const final = acc.trim() || FALLBACK;
       patchLast((m) => ({ ...m, content: final, pending: false }));
     } catch (err) {
-      if ((err as { name?: string } | null)?.name === "AbortError") return;
-      patchLast((m) => ({ ...m, content: FALLBACK, pending: false }));
+      // Unmounting aborts too: nothing to show then.
+      if ((err as { name?: string } | null)?.name === "AbortError" && !stalled) return;
+      // Keep whatever she had already said; only an empty reply gets the fallback line.
+      const partial = acc.trim();
+      patchLast((m) => ({ ...m, content: partial ? `${partial}…` : FALLBACK, pending: false }));
     } finally {
+      window.clearTimeout(watchdog);
       setBusy(false);
       abortRef.current = null;
     }
