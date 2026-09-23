@@ -166,3 +166,22 @@ old way.
 - Measured on the live site (fast 4G, 4× CPU): first paint 0.5 s; the store's
   3D room appears at about 5.9 s (slow 4G 8.6 s), still over the roadmap's 3 s
   target, which is mostly three.js arriving and starting; next step there.
+
+### 9 · Phase 4 started: the cap in 3D (behind a switch)
+
+Open **`/try-on?cap3d=1`** on your phone, allow the camera and pick the cap.
+Instead of the flat picture, the cap is 3D: six panels, a button on top, a
+curved visor, and Kitty's face embroidered on the front, in the colour you
+pick. It sits on your forehead, is sized to your face, turns and tilts with
+your head, and an invisible head hides the back of it. Its light follows the
+room's (a dark room gives a darker cap). The photo button includes it.
+
+It is behind the switch because nobody has worn it yet: it was built without
+a camera, tested on posed heads (see the screenshots in the harness), so the
+proportions are first estimates. Tell the next session where it sits wrong
+(too high, too big, visor too long) and it becomes the default. Without the
+switch the try-on is exactly as before, and if face tracking cannot start on
+a device, it falls back to the flat cap by itself.
+
+Also: link previews (WhatsApp, iMessage) now show Kitty's photo with her name,
+and "Add to Home Screen" gives an app with her face as the icon.

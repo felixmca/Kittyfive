@@ -163,6 +163,8 @@ async function withPage(browser, viewport, fn) {
     if (/Failed to load resource/.test(m.text())) return;
     if (cancelledPrefetch(m.text()) || /Failed to fetch RSC payload .* Falling back to browser navigation/.test(m.text())) return;
     const at = m.location()?.url ?? "";
+    // MediaPipe's wasm writes its own INFO/warning log lines to console.error.
+    if (/vision_wasm_internal/.test(at) && /^(INFO:|[IW]\d{4} )/.test(m.text())) return;
     errors.push(`console: ${m.text().slice(0, 300)}${at ? ` @ ${at}` : ""}`);
   });
   page.on("requestfailed", (r) => {
@@ -762,6 +764,49 @@ async function journeyReader(browser, viewport) {
   });
 }
 
+/**
+ * The 3D cap (Phase 4, behind ?cap3d=1): a fake camera, a head posed through
+ * window.__cap3d.setHead (no face needed), and the cap drawn over the video.
+ * Needs its own Chromium with fake media devices; face tracking loads
+ * MediaPipe from jsDelivr and Google, so this journey needs the network.
+ */
+async function journeyCap3D(_browser, viewport) {
+  if (viewport.engine !== "chromium") return;
+  const route = "/try-on?cap3d=1";
+  const browser = await chromium.launch({
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+  });
+  try {
+    await withPage(browser, viewport, async (page, errors, bad) => {
+      await page.context().grantPermissions(["camera"], { origin: BASE });
+      await goto(page, route);
+      await page.click('text="Open camera"');
+      const ready = await page.waitForFunction(() => !!window.__cap3d, null, { timeout: 30_000 }).then(() => true, () => false);
+      record(viewport.name, route, "the 3D cap starts over the live camera", ready);
+      if (!ready) return;
+      await page.evaluate(() => {
+        const v = document.querySelector("video");
+        const aspect = v && v.videoWidth ? v.videoWidth / v.videoHeight : 4 / 3;
+        const s = Math.sin(0.25);
+        window.__cap3d.setHead({ anchor: { x: 0.5, y: 0.34 }, width: 0.13, quat: [0, s, 0, Math.cos(0.25)], aspect });
+      });
+      await page.waitForTimeout(800);
+      const state = await page.evaluate(() => window.__cap3d.state());
+      const canvas = await page.$("[data-cap3d]");
+      const painted = canvas ? await canvasPainted(canvas) : { ok: false, detail: "no canvas" };
+      record(viewport.name, route, "a posed head gets the cap (the canvas paints)", state.visible && painted.ok, painted.detail);
+      await page.screenshot({ path: join(OUT, `cap3d-${viewport.name}.png`) });
+      // The shutter composites the cap into the photo.
+      await page.click('button[aria-label*="photo" i], button[aria-label*="shutter" i], button[aria-label*="Take" i]').catch(() => {});
+      await page.waitForTimeout(800);
+      record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+      record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
 /** Kitty Tunables on /admin (demo: saved in this browser), and the store picking them up. */
 async function journeyAdmin(browser, viewport) {
   const route = "/admin (Tunables, demo)";
@@ -889,7 +934,7 @@ async function main() {
     landing: [journeyLanding, journeyLandingReduced],
     store: [journeyStore],
     stories: [journeyStories, journeyReader, journeyStoriesOwner],
-    tryon: [journeyTryOn],
+    tryon: [journeyTryOn, journeyCap3D],
     admin: [journeyAdmin],
     pages: [journeyPages],
   };

@@ -199,7 +199,12 @@ to render on phones and easier to make charming.
 
 - [ ] Cap: MediaPipe FaceLandmarker's head transform anchors a 3D cap GLB, an
       invisible head mesh hides the back of the cap, light matched to the
-      camera frame
+      camera frame *(23 Sep: built behind `/try-on?cap3d=1`, a procedural cap
+      with six panels, a curved visor and Kitty's face embroidered on the
+      front, placed on the forehead and sized to the face, turned with the
+      head, an invisible head hiding its far side, lit from the video's own
+      brightness; in the photo too. Tested on posed heads only: needs a try on
+      a real face (Felix's phone) and then to become the default)*
 - [ ] Hoodie and long-sleeve: pose + body segmentation; the garment is warped
       to shoulders, hips and elbows (thin-plate spline); the camera's own
       shading is multiplied through so folds show; arms occlude correctly

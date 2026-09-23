@@ -19,9 +19,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRODUCTS, type Product } from "@/config/products";
 import { useUi } from "@/lib/store";
 import { CLEAR_OF_HOME } from "@/components/chrome/layout";
+import Cap3D from "./Cap3D";
 import KittyCompanion from "./KittyCompanion";
 import MockupFallback from "./MockupFallback";
 import Overlay from "./Overlay";
+import { useFaceTracking } from "./useFaceTracking";
 import { useLandmarks } from "./useLandmarks";
 
 type Phase =
@@ -81,6 +83,7 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const capCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const kittyCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const alive = useRef(true);
@@ -99,7 +102,18 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   }, [snap]);
 
   const live = phase === "live";
-  const { landmarks, status: tracking } = useLandmarks(videoRef, live);
+  // Phase 4, first step: the cap in 3D on the head, from face tracking. Behind
+  // ?cap3d=1 until it has been tried on real faces; if face tracking cannot
+  // start here, the 2D cap (body tracking) takes over for the visit.
+  const [cap3dWanted] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("cap3d"),
+  );
+  const [faceFailed, setFaceFailed] = useState(false);
+  const [headSeen, setHeadSeen] = useState(false);
+  const use3dCap = cap3dWanted && !faceFailed && product.id === "cap";
+  const { landmarks, status: tracking } = useLandmarks(videoRef, live && !use3dCap);
+  const { head, status: faceTracking } = useFaceTracking(videoRef, live && use3dCap);
+  if (faceTracking === "unavailable" && !faceFailed) setFaceFailed(true);
 
   // ------------------------------------------------------------- camera
 
@@ -286,6 +300,10 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
       if (overlay && overlay.width > 0) {
         ctx.drawImage(overlay, 0, 0, overlay.width, overlay.height, 0, 0, out.width, out.height);
       }
+      const cap = capCanvasRef.current;
+      if (cap && cap.width > 0) {
+        ctx.drawImage(cap, 0, 0, cap.width, cap.height, 0, 0, out.width, out.height);
+      }
 
       const kitty = kittyCanvasRef.current;
       if (kitty && kitty.width > 0) {
@@ -366,11 +384,17 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
 
   const hint = !live
     ? null
-    : tracking === "loading"
-      ? "Finding you…"
-      : anchored
-        ? null
-        : "Move into frame";
+    : use3dCap
+      ? faceTracking === "loading"
+        ? "Finding your face…"
+        : headSeen
+          ? null
+          : "Look at the camera"
+      : tracking === "loading"
+        ? "Finding you…"
+        : anchored
+          ? null
+          : "Move into frame";
   const subHint =
     live && tracking === "unavailable"
       ? "Fit tracking is off on this device, so the merch sits in the middle."
@@ -448,7 +472,17 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
       {!live && <MockupFallback product={product} colour={colour} dim />}
 
       {/* merch */}
-      {live && (
+      {live && use3dCap && (
+        <Cap3D
+          head={head}
+          videoRef={videoRef}
+          colour={colour}
+          mirrored={mirrored}
+          canvasRef={capCanvasRef}
+          onSeenChange={setHeadSeen}
+        />
+      )}
+      {live && !use3dCap && (
         <Overlay
           videoRef={videoRef}
           landmarks={landmarks}
