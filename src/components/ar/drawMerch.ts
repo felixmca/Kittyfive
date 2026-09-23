@@ -383,14 +383,19 @@ function paintCap(c: CanvasRenderingContext2D, w: number, h: number, colour: str
   c.fillText("K", 0, by + br * 0.06);
 }
 
-/** Hoodie or long-sleeve silhouette (body + sleeves + hood/collar) in a w × h box. */
-function paintGarment(
+/**
+ * Hoodie or long-sleeve silhouette (body + sleeves + hood/collar) in a w × h
+ * box centred on the origin. Without `sleeves`, the body alone (the fitted
+ * try-on draws sleeves of its own along the arms).
+ */
+export function paintGarment(
   c: CanvasRenderingContext2D,
   w: number,
   h: number,
   colour: string,
   hoodie: boolean,
   mirrored: boolean,
+  sleeves = true,
 ) {
   const top = -0.5 * h;
   const shoulderY = top + 0.1 * h;
@@ -410,25 +415,7 @@ function paintGarment(
   }
 
   // sleeves: thick round-capped strokes from shoulder to cuff
-  c.lineCap = "round";
-  c.lineJoin = "round";
-  c.lineWidth = 0.17 * w;
-  c.strokeStyle = shade(colour, -0.04);
-  for (const s of [-1, 1]) {
-    c.beginPath();
-    c.moveTo(s * 0.25 * w, shoulderY + 0.04 * h);
-    c.lineTo(s * 0.4 * w, shoulderY + 0.6 * h);
-    c.stroke();
-  }
-  // cuffs
-  c.lineWidth = 0.19 * w;
-  c.strokeStyle = shade(colour, -0.14);
-  for (const s of [-1, 1]) {
-    c.beginPath();
-    c.moveTo(s * 0.392 * w, shoulderY + 0.575 * h);
-    c.lineTo(s * 0.4 * w, shoulderY + 0.6 * h);
-    c.stroke();
-  }
+  if (sleeves) paintSleeves(c, w, h, colour, shoulderY);
 
   // body
   const g = c.createLinearGradient(0, shoulderY, 0, hem);
@@ -488,14 +475,36 @@ function paintGarment(
   // chest patch on the wearer's left (screen-left in a mirror)
   const side = mirrored ? -1 : 1;
   paintKittyPatch(c, side * 0.13 * w, shoulderY + 0.2 * h, 0.085 * w, light);
-  if (!hoodie) {
+  if (!hoodie && sleeves) {
     // the long-sleeve also carries a small Kitty on the sleeve
     paintKittyPatch(c, side * 0.35 * w, shoulderY + 0.36 * h, 0.05 * w, light);
   }
 }
 
+function paintSleeves(c: CanvasRenderingContext2D, w: number, h: number, colour: string, shoulderY: number) {
+  c.lineCap = "round";
+  c.lineJoin = "round";
+  c.lineWidth = 0.17 * w;
+  c.strokeStyle = shade(colour, -0.04);
+  for (const s of [-1, 1]) {
+    c.beginPath();
+    c.moveTo(s * 0.25 * w, shoulderY + 0.04 * h);
+    c.lineTo(s * 0.4 * w, shoulderY + 0.6 * h);
+    c.stroke();
+  }
+  // cuffs
+  c.lineWidth = 0.19 * w;
+  c.strokeStyle = shade(colour, -0.14);
+  for (const s of [-1, 1]) {
+    c.beginPath();
+    c.moveTo(s * 0.392 * w, shoulderY + 0.575 * h);
+    c.lineTo(s * 0.4 * w, shoulderY + 0.6 * h);
+    c.stroke();
+  }
+}
+
 /** A tiny woven patch: contrast square with a cat-face silhouette. */
-function paintKittyPatch(
+export function paintKittyPatch(
   c: CanvasRenderingContext2D,
   x: number,
   y: number,

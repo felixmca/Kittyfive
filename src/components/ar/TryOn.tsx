@@ -114,7 +114,17 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   const [faceFailed, setFaceFailed] = useState(false);
   const [headSeen, setHeadSeen] = useState(false);
   const use3dCap = cap3dWanted && !faceFailed && product.id === "cap";
-  const { landmarks, status: tracking } = useLandmarks(videoRef, live && !use3dCap);
+  // Phase 4, second step: the hoodie and long-sleeve fitted to the body
+  // (arms, the camera's light, the silhouette). Behind ?fit=1 for the same reason.
+  const [fitWanted] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("fit"),
+  );
+  const fitGarment = fitWanted && product.anchor !== "head";
+  const {
+    landmarks,
+    status: tracking,
+    mask,
+  } = useLandmarks(videoRef, live && !use3dCap, { segmentation: fitGarment });
   const { head, status: faceTracking } = useFaceTracking(videoRef, live && use3dCap);
   if (faceTracking === "unavailable" && !faceFailed) setFaceFailed(true);
 
@@ -496,6 +506,8 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
           canvasRef={overlayCanvasRef}
           onAnchoredChange={onAnchoredChange}
           personRef={personRef}
+          fitted={fitGarment}
+          mask={mask}
         />
       )}
 

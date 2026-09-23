@@ -27,6 +27,9 @@ in [`docs/screenshots/day-23/`](screenshots/day-23/).
    the camera and wear the cap. Tell the next session where it sits wrong
    (too high, too big, visor too long). Until then the normal try-on is
    unchanged.
+5. **The fitted hoodie:** open `https://kittyfive.vercel.app/try-on?fit=1`,
+   stand back so your arms are in the picture, and pick the hoodie or the
+   long-sleeve. The sleeves should follow your arms (§12).
 
 If the landing still misbehaves, you don't need to describe it: each visit
 sends a small anonymous report (browser, screen, how far the story got, any
@@ -54,8 +57,9 @@ error), and the next session can read yours (§2 below).
 
 **Not done, and why:** the Blender house and the real 3D Kitty need your
 photos (and the cat model needs downloading, which I did not do without
-asking); realistic hoodie/long-sleeve try-on needs a person on camera to
-calibrate against; Phases 5–6 need a domain, Stripe and Printful accounts.
+asking); the fitted hoodie and the 3D cap need a real person on camera to
+calibrate against (both are built, behind switches); Phases 5–6 need a
+domain, Stripe and Printful accounts.
 
 ## Plan for the day
 
@@ -251,3 +255,43 @@ and "Add to Home Screen" gives an app with her face as the icon.
 - **In the try-on, Kitty comes and sits beside you** (on the side with more
   room, turned towards you) instead of pacing the bottom of the screen, and
   moves over when you do.
+
+### 11 · A review of the day, and the store's speed
+
+A review of everything above found nine small problems, all fixed and
+deployed (`4805b46`). Two you could have seen:
+- After 7pm the store's sun/moon button made the page redraw itself on
+  arrival, and the room faded in from daylight. It now opens in the evening
+  light straight away.
+- Coming back to the landing from another app mid-chapter showed the end of
+  the chapter for a moment. It now shows where the story was.
+
+The rest were hardening: frame decoding copes with a stuck worker, the story
+report no longer calls a background tab "stalled", the 3D cap gives its
+graphics memory back when the camera closes.
+
+**Store speed (Phase 3's "60 fps, first picture under 3 s on 4G"):** on an
+emulated 4G phone the room's first picture comes at 1.7 s (2.3 s with the
+processor slowed four times); it draws 98 objects and 15,000 triangles a
+frame and holds 60 fps here. On a phone that cannot keep up it now draws
+fewer pixels (from 1.75× down to 1×) instead of stuttering. It still needs a
+look on a real iPhone, and again when the Blender house arrives.
+
+### 12 · Phase 4: the hoodie and long-sleeve fitted to you (behind a switch)
+
+Open **`/try-on?fit=1`**, allow the camera and pick the hoodie or the
+long-sleeve. Instead of a flat picture laid over you, the garment is fitted:
+- the body runs from your shoulders to below your hips and tilts and leans
+  with you (in a selfie, where your hips are out of the picture, it guesses
+  them from your shoulders);
+- each sleeve follows your arm, shoulder to elbow to wrist, and bends at the
+  elbow; a hand in front of you has its sleeve drawn over the body;
+- your camera's own light is multiplied through it, so folds, shadows and
+  the room's brightness show on the fabric;
+- it is trimmed to your outline (the body tracker now also says which pixels
+  are you), when that outline looks trustworthy.
+
+Like the 3D cap, it was built and tested on posed bodies only (screenshots in
+the harness), so it stays behind the switch until you have tried it. Tell the
+next session what looks wrong (too wide, sleeves too thick, hem too long) and
+it becomes the default. Without the switch nothing changes.

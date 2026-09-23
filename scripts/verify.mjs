@@ -807,6 +807,70 @@ async function journeyCap3D(_browser, viewport) {
   }
 }
 
+/**
+ * The fitted hoodie (/try-on?fit=1): a posed body (no camera person needed)
+ * gets the garment warped onto it: body between shoulders and hem, a sleeve
+ * along a raised arm, a forearm in front of the body drawn over it.
+ */
+async function journeyFit(_browser, viewport) {
+  if (viewport.engine !== "chromium") return;
+  const route = "/try-on?fit=1";
+  const browser = await chromium.launch({ args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
+  try {
+    await withPage(browser, viewport, async (page, errors, bad) => {
+      await page.context().grantPermissions(["camera"], { origin: BASE });
+      await goto(page, route);
+      await page.click('text="Open camera"');
+      await page.locator('[role="radio"]').nth(1).click(); // the hoodie
+      const ready = await page.waitForFunction(() => !!window.__fit, null, { timeout: 30_000 }).then(() => true, () => false);
+      record(viewport.name, route, "the fitted hoodie starts over the live camera", ready);
+      if (!ready) return;
+      // Normalised video landmarks: a person half the frame's height, the
+      // (mirrored) screen-right arm raised, the other hand in front of the body.
+      const P = (x, y, v = 1) => ({ x, y, visibility: v });
+      const lm = {
+        nose: P(0.5, 0.35), leftEye: P(0.51, 0.34), rightEye: P(0.49, 0.34), leftEar: P(0.53, 0.35), rightEar: P(0.47, 0.35),
+        leftShoulder: P(0.565, 0.43), rightShoulder: P(0.435, 0.43), leftHip: P(0.54, 0.6), rightHip: P(0.46, 0.6),
+        leftElbow: P(0.66, 0.36), rightElbow: P(0.4, 0.52), leftWrist: P(0.65, 0.28), rightWrist: P(0.49, 0.55),
+      };
+      await page.evaluate((lm) => window.__fit.setPose(lm), lm);
+      await page.waitForTimeout(600);
+      const probe = await page.evaluate((lm) => {
+        const canvas = document.querySelector("[data-merch-overlay]");
+        const video = document.querySelector("video");
+        if (!canvas || !video) return null;
+        const r = canvas.getBoundingClientRect();
+        const vw = video.videoWidth || 640;
+        const vh = video.videoHeight || 480;
+        const s = Math.max(r.width / vw, r.height / vh);
+        // The front camera is mirrored on screen.
+        const at = (p) => ({ x: (r.width - vw * s) / 2 + (1 - p.x) * vw * s, y: (r.height - vh * s) / 2 + p.y * vh * s });
+        const ctx = canvas.getContext("2d");
+        const k = canvas.width / r.width;
+        const alpha = (q) => ctx.getImageData(Math.round(q.x * k), Math.round(q.y * k), 1, 1).data[3];
+        const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        const body = at(mid(mid(lm.leftShoulder, lm.rightShoulder), mid(lm.leftHip, lm.rightHip)));
+        const sleeve = at(mid(lm.leftShoulder, lm.leftElbow));
+        const air = at({ x: 0.5, y: 0.2 });
+        return { body: alpha(body), sleeve: alpha(sleeve), air: alpha(air) };
+      }, lm);
+      const state = await page.evaluate(() => window.__fit.state());
+      record(
+        viewport.name,
+        route,
+        "a posed body gets the hoodie: on the body, along the raised arm, not in the air above",
+        !!probe && state.fitted && probe.body > 200 && probe.sleeve > 200 && probe.air === 0,
+        probe ? `fitted ${state.fitted}, alpha body ${probe.body}, sleeve ${probe.sleeve}, air ${probe.air}` : "no overlay",
+      );
+      await page.screenshot({ path: join(OUT, `fit-${viewport.name}.png`) });
+      record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+      record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
 /** Kitty Tunables on /admin (demo: saved in this browser), and the store picking them up. */
 async function journeyAdmin(browser, viewport) {
   const route = "/admin (Tunables, demo)";
@@ -941,7 +1005,7 @@ async function main() {
     landing: [journeyLanding, journeyLandingReduced],
     store: [journeyStore],
     stories: [journeyStories, journeyReader, journeyStoriesOwner],
-    tryon: [journeyTryOn, journeyCap3D],
+    tryon: [journeyTryOn, journeyCap3D, journeyFit],
     admin: [journeyAdmin],
     pages: [journeyPages],
   };

@@ -214,6 +214,12 @@ to render on phones and easier to make charming.
 - [ ] Hoodie and long-sleeve: pose + body segmentation; the garment is warped
       to shoulders, hips and elbows (thin-plate spline); the camera's own
       shading is multiplied through so folds show; arms occlude correctly
+      *(23 Sep: built behind `/try-on?fit=1`: a piecewise-affine mesh warp
+      (body grid shoulders → hem, sleeves shoulder → elbow → wrist with a bend),
+      the video's normalised luminance multiplied through, trimmed to the
+      PoseLandmarker segmentation mask when it covers the body, a forearm in
+      front of the body drawn over it. Tested on posed bodies only: needs a
+      try on a real person, then to become the default)*
 - [ ] Kitty stands next to you in 3D *(23 Sep: the drawn 3D cat now walks over
       and sits beside whoever is being tracked, turned towards them, and
       follows when they move; next, the real Kitty model and a floor under you)*

@@ -7,11 +7,22 @@
  *
  * It re-renders only when the product, colour or mirror state change; the
  * per-frame work reads refs.
+ *
+ * With `fitted` (behind /try-on?fit=1), the hoodie and long-sleeve are warped
+ * onto the body instead of laid over it (./fitGarment.ts); the cap and any
+ * frame without shoulders keep the flat placement.
  */
 import { useEffect, useRef, type RefObject } from "react";
 import type { Product } from "@/config/products";
 import { PROCEDURAL_ASPECT, drawProduct, peekImage, placeProduct } from "./drawMerch";
+import { FittedGarment } from "./fitGarment";
 import { mapPose, type Landmarks, type PersonSpot, type ScreenPose } from "./landmarks";
+import type { PersonMask } from "./useLandmarks";
+
+interface FitWindow extends Window {
+  /** Debug/verify: pose a body without a camera (normalised video landmarks), and read what was drawn. */
+  __fit?: { setPose: (lm: Landmarks | null) => void; state: () => { fitted: boolean } };
+}
 
 interface OverlayProps {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -25,6 +36,10 @@ interface OverlayProps {
   onAnchoredChange?: (anchored: boolean) => void;
   /** Receives where the person is each frame, for Kitty to sit beside them. */
   personRef?: RefObject<PersonSpot | null>;
+  /** Warp the hoodie and long-sleeve onto the body (arms, light, silhouette). */
+  fitted?: boolean;
+  /** The person's silhouette, for `fitted`. */
+  mask?: RefObject<PersonMask | null>;
 }
 
 export default function Overlay({
@@ -36,6 +51,8 @@ export default function Overlay({
   canvasRef,
   onAnchoredChange,
   personRef,
+  fitted = false,
+  mask,
 }: OverlayProps) {
   const localRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -50,6 +67,18 @@ export default function Overlay({
     let ch = 0;
     let dpr = 1;
     let lastAnchored: boolean | null = null;
+    const garment = fitted && product.anchor !== "head" ? new FittedGarment() : null;
+    let forced: Landmarks | null | undefined;
+    let lastFitted = false;
+    const w = window as FitWindow;
+    if (garment) {
+      w.__fit = {
+        setPose: (lm) => {
+          forced = lm;
+        },
+        state: () => ({ fitted: lastFitted }),
+      };
+    }
     const fallbackAspect = PROCEDURAL_ASPECT[product.id];
     const parent = canvas.parentElement;
 
@@ -82,7 +111,7 @@ export default function Overlay({
       ctx.clearRect(0, 0, cw, ch);
 
       const video = videoRef.current;
-      const lm = landmarks.current;
+      const lm = forced !== undefined ? forced : landmarks.current;
       let pose: ScreenPose | null = null;
       if (lm && video && video.videoWidth > 0 && video.videoHeight > 0) {
         pose = mapPose(lm, video.videoWidth, video.videoHeight, cw, ch, mirrored);
@@ -103,7 +132,20 @@ export default function Overlay({
         onAnchoredChange?.(place.anchored);
       }
       try {
-        drawProduct(ctx, product, colour, place, img, { mirrored, dpr });
+        lastFitted = false;
+        if (garment && pose && !img) {
+          const m = mask?.current;
+          lastFitted = garment.draw(ctx, pose, product, colour, {
+            cw,
+            ch,
+            dpr,
+            mirrored,
+            video: forced !== undefined ? null : video,
+            // A silhouette older than half a second is somebody else's pose.
+            mask: m && performance.now() - m.at < 500 ? m.canvas : null,
+          });
+        }
+        if (!lastFitted) drawProduct(ctx, product, colour, place, img, { mirrored, dpr });
       } catch (err) {
         // one bad frame must not kill the loop
         if (Math.random() < 0.01) console.warn("[ar] overlay draw failed", err);
@@ -115,8 +157,9 @@ export default function Overlay({
       cancelAnimationFrame(raf);
       if (ro) ro.disconnect();
       else window.removeEventListener("resize", fit);
+      if (garment) delete w.__fit;
     };
-  }, [videoRef, landmarks, product, colour, mirrored, onAnchoredChange, personRef]);
+  }, [videoRef, landmarks, product, colour, mirrored, onAnchoredChange, personRef, fitted, mask]);
 
   return (
     <canvas
@@ -126,6 +169,7 @@ export default function Overlay({
       }}
       className="pointer-events-none absolute inset-0 h-full w-full"
       aria-hidden
+      data-merch-overlay
     />
   );
 }
