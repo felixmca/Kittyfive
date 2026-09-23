@@ -361,7 +361,7 @@ send is used up for nothing.
 - **The self-hosting guide** for Phase 7 is written ([SELF-HOSTING.md](SELF-HOSTING.md)),
   and `.env.example` now names the Supabase key the code actually reads.
 
-### 15 · Two things that would have bitten later
+### 15 · Things that would have bitten later
 
 - **New clips and the turntable would not have shown for returning
   visitors.** Everything under `/story` and `/turntable` was sent as "keep
@@ -375,17 +375,31 @@ send is used up for nothing.
   scrolled out of view it now gives its video frames back (about 80 MB),
   before the turntable decodes its own photos (about 120 MB once yours
   exist). It takes them back the moment you scroll up to it.
-- An accessibility check (axe, WCAG 2.1 AA) over every page found no
-  violations; two small fixes from what it flagged.
-- **In the try-on, Kitty sits on your floor** when your feet are in the
-  picture (stand back): on the same floor as you and a cat's size next to
-  you, instead of at the bottom of the screen. In a selfie she stays where
-  she was.- **Delete my account** on /account (type DELETE to confirm): deletes the
-  sign-in and the person's story subscriptions, only ever their own
-  (`delete_my_account()`, covered by the RLS smoke test).- **On a weak signal the story no longer stops for good.** If some frames
+- **On a weak signal the story no longer stops for good.** If some frames
   never arrive (tested by making six of chapter 1's frames hang), it used to
   wait at that spot forever; now each download gives up after 15 s and is
   retried behind the others, and playback waits at most 2.5 s before
   playing on past the gap. Same idea in the store's chat: a reply that stops
   arriving ends after 25 s, keeping whatever Kitty had already said.
 
+### 16 · Small additions
+
+- **In the try-on, Kitty sits on your floor** when your feet are in the
+  picture (stand back): on the same floor as you and a cat's size next to
+  you, instead of at the bottom of the screen. In a selfie she stays where
+  she was.
+- **Delete my account** on /account (type DELETE to confirm): deletes the
+  sign-in and the person's story subscriptions, only ever their own
+  (`delete_my_account()`, covered by the RLS smoke test).
+- **Accessibility:** an axe check (WCAG 2.1 AA and best practices) is now
+  part of `npm run verify`, over every page and with the menu and the chat
+  open. It is clean; five small fixes came out of it.
+- **Search engines:** `robots.txt` and `sitemap.xml` (every published
+  chapter, updated hourly; the account, admin and email pages kept out).
+- **A privacy notice draft** for before the first email:
+  [PRIVACY-DRAFT.md](PRIVACY-DRAFT.md). Not published; it has [brackets]
+  only you can fill in.
+
+On a slow 3G connection (emulated) the landing's story starts after about
+16 s behind the Kittyfive splash; that time is the page's own scripts
+arriving, not the story. On 4G it starts in about 3.5 s.
