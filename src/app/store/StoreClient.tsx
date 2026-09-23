@@ -30,9 +30,10 @@ export default function StoreClient() {
       {/* The product panel has its own "Try it on"; a floating camera would sit on it. */}
       <Chrome hideCamera />
 
-      <div className="absolute inset-0">
+      {/* The room is the page's main content (screen readers get the header, the arrows and the panel around it). */}
+      <main className="absolute inset-0" aria-label="Kitty's living room">
         <StoreScene />
-      </div>
+      </main>
 
       {/* A soft shade under the chrome row and the heading, so both read over a bright room. */}
       <div
