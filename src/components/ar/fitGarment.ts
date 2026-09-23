@@ -110,8 +110,10 @@ function fitTo(pose: ScreenPose): Fit | null {
   const hemAcross = hipW > 4 ? norm(sub(hipB, hipA)) : across;
   const hemHalf = Math.max(hipW * 0.85, sw * 0.5);
 
-  const topL = add(A, mul(across, -sw * 0.09));
-  const topR = add(B, mul(across, sw * 0.09));
+  // The tracker's shoulders are the joints: the garment's shoulder line is
+  // above and outside them (tried on a real person, 23 Sep 2026).
+  const topL = add(add(A, mul(across, -sw * 0.16)), mul(down, -sw * 0.2));
+  const topR = add(add(B, mul(across, sw * 0.16)), mul(down, -sw * 0.2));
   const hemL = add(hemMid, mul(hemAcross, -hemHalf));
   const hemR = add(hemMid, mul(hemAcross, hemHalf));
 
@@ -122,7 +124,7 @@ function fitTo(pose: ScreenPose): Fit | null {
     const elbowPt = personLeft ? pose.leftElbow : pose.rightElbow;
     const wristPt = personLeft ? pose.leftWrist : pose.rightWrist;
     const out = mul(across, screenLeft ? -1 : 1);
-    const root = add(add(shoulder, mul(out, sw * 0.03)), mul(down, sw * 0.1));
+    const root = add(add(shoulder, mul(out, sw * 0.06)), mul(down, -sw * 0.04));
     const elbow: V = seen(elbowPt) ? elbowPt : add(root, mul(norm(add(down, mul(out, 0.22))), sw * 0.85));
     const upper = norm(sub(elbow, root));
     const wrist: V = seen(wristPt) ? wristPt : add(elbow, mul(seen(elbowPt) ? upper : norm(add(down, mul(out, 0.1))), sw * 0.78));

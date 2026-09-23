@@ -21,12 +21,19 @@
  * The light follows the room: the video's average brightness and colour,
  * sampled twice a second, set the fill light.
  *
- * Proportions are first estimates from face geometry and have not been tried
- * on a real face yet (no camera where this was built): /try-on?cap3d=1 shows
- * it; window.__cap3d.setHead() lets the verify harness pose a head without one.
+ * The cap itself is the store's model (/models/merch-cap.glb, made by
+ * scripts/store/merch.py) at its real size, dyed the chosen colour; the drawn
+ * cap below stands in while it loads, or if it cannot. Placement was first
+ * tried on a real face on 23 Sep 2026 (Felix's photos played in as the
+ * camera): the drawn cap sat at the hairline and too shallow, so the model's
+ * band sits lower, about a third of a face width below landmark 10, with a
+ * crown tall enough to cover the head. window.__cap3d.setHead() lets the
+ * verify harness pose a head without a camera.
  */
 import { useEffect, useRef, type RefObject } from "react";
 import * as THREE from "three";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { PersonSpot } from "./landmarks";
 import type { Head } from "./useFaceTracking";
 
@@ -44,6 +51,14 @@ interface Props {
 }
 
 type CapWindow = Window & { __cap3d?: { setHead: (h: Head | null) => void; state: () => { visible: boolean } } };
+
+const CAP_GLB = "/models/merch-cap.glb";
+/** The tracker's unit is the face's width (landmarks 234–454), about 14.5 cm; the model is in metres. */
+const FACE_WIDTH_M = 0.145;
+/** Where the model's band centre sits from the top of the forehead (landmark 10), in face widths. */
+const GLB_BAND = new THREE.Vector3(0, -0.31, -0.66);
+/** Tipped back a little: the band is higher at the front than over the back of the head. */
+const GLB_TILT = -0.14;
 
 /** Crown: a sphere cap. Everything below is in face widths (1 = cheekbone to cheekbone). */
 const R = 0.6;
@@ -118,6 +133,7 @@ function buildCap(colour: string): { cap: THREE.Group; materials: THREE.MeshStan
   patch.position.set(0, R * Math.sin(up) * 1.012, R * Math.cos(up) * 1.012);
   patch.rotation.x = -up;
   crownGroup.add(patch);
+  crownGroup.name = "drawn";
   cap.add(crownGroup);
 
   // The brim: a curved visor off the front of the band, angled down.
@@ -142,6 +158,7 @@ function buildCap(colour: string): { cap: THREE.Group; materials: THREE.MeshStan
   // edge tucks just under the front of the band (≈ y -0.15, z 0.12).
   brim.rotation.x = Math.PI / 2 + 0.24;
   brim.position.set(0, -0.165, 0.15);
+  brim.name = "drawn";
   cap.add(brim);
 
   // The wearer's head: depth only, drawn first, so the cap's far side is hidden.
@@ -207,6 +224,52 @@ export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onS
     pivot.add(built.cap);
     scene.add(pivot);
 
+    // The store's cap model, when it arrives: the drawn crown and brim step aside.
+    const model = new THREE.Group();
+    model.position.copy(GLB_BAND);
+    model.rotation.x = GLB_TILT;
+    model.scale.setScalar(1 / FACE_WIDTH_M);
+    pivot.add(model);
+    const fabrics: THREE.MeshStandardMaterial[] = [];
+    const modelMaterials: THREE.Material[] = [];
+    let modelReady = false;
+    let cancelled = false;
+    const draco = new DRACOLoader();
+    draco.setDecoderPath("/draco/");
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(draco);
+    loader.load(
+      CAP_GLB,
+      (gltf) => {
+        if (cancelled) return;
+        gltf.scene.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const m = mesh.material as THREE.MeshStandardMaterial;
+          modelMaterials.push(m);
+          if (m.name === "Fabric") {
+            fabrics.push(m);
+            m.color.set(colourRef.current);
+          } else if (m.name === "Embroidery") {
+            m.transparent = false;
+            m.depthWrite = true;
+            m.alphaTest = 0.35;
+            m.polygonOffset = true;
+            m.polygonOffsetFactor = -2;
+          }
+        });
+        model.add(gltf.scene);
+        modelReady = true;
+      },
+      undefined,
+      (err) => console.warn("[ar] the cap model did not load; the drawn cap stays", err),
+    );
+    const showModel = () => {
+      built.cap.children.forEach((c) => {
+        if (c.name === "drawn") c.visible = !modelReady;
+      });
+    };
+
     // Debug/verify: pose a head without a camera.
     let forced: Head | null | undefined;
     let visible = false;
@@ -255,7 +318,9 @@ export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onS
         built = buildCap(colourRef.current);
         builtColour = colourRef.current;
         pivot.add(built.cap);
+        for (const m of fabrics) m.color.set(colourRef.current);
       }
+      showModel();
 
       const video = videoRef.current;
       const h = forced !== undefined ? forced : head.current;
@@ -322,8 +387,15 @@ export default function Cap3D({ head, videoRef, colour, mirrored, canvasRef, onS
     raf = requestAnimationFrame(frame);
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(raf);
       built.dispose();
+      modelMaterials.forEach((m) => m.dispose());
+      model.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) mesh.geometry.dispose();
+      });
+      draco.dispose();
       renderer.dispose();
       // Give the context back now: Safari allows only a few at a time, and
       // the camera (and so this canvas) can open and close many times.

@@ -80,7 +80,11 @@ export function placeProduct(
 }
 
 /**
- * Cap: width 1.9 × ear-to-ear, centred above the eyes, rotated by the ear line.
+ * Cap (the fallback when face tracking cannot run; the 3D cap is the default):
+ * width 2.25 × the head's width, centred above the eyes, rotated by the ear
+ * line. The head's width is ear to ear, but never less than 1.7 × the eye to
+ * ear distance on the nearer side, so a turned head does not shrink the cap
+ * (tried on a real face, 23 Sep 2026: in profile it had shrunk to a button).
  * Falls back to eyes (× 2.4 ≈ head width), then shoulders, then the screen centre.
  */
 function placeCap(pose: ScreenPose | null, vw: number, vh: number, aspect: number): Placement {
@@ -96,6 +100,11 @@ function placeCap(pose: ScreenPose | null, vw: number, vh: number, aspect: numbe
       earDist = earsOk
         ? dist(pose.leftEar, pose.rightEar)
         : dist(pose.leftEye, pose.rightEye) * 2.4;
+      const side = Math.max(
+        seen(pose.leftEye) && seen(pose.leftEar) ? dist(pose.leftEye, pose.leftEar) : 0,
+        seen(pose.rightEye) && seen(pose.rightEar) ? dist(pose.rightEye, pose.rightEar) : 0,
+      );
+      earDist = Math.max(earDist, side * 1.7);
       angle = earsOk
         ? lineAngle(pose.leftEar, pose.rightEar)
         : lineAngle(pose.leftEye, pose.rightEye);
@@ -110,12 +119,12 @@ function placeCap(pose: ScreenPose | null, vw: number, vh: number, aspect: numbe
     }
 
     if (ref && earDist > 4) {
-      const w = 1.9 * earDist;
+      const w = 2.25 * earDist;
       const h = w * aspect;
       const up = upVec(angle);
-      // Box bottom sits a little above the eye line; the art inside the box
-      // leaves a margin so the brim lands around the eyebrows.
-      const lift = 0.12 * earDist + h / 2;
+      // Box bottom a touch above the eye line; the art inside the box leaves
+      // a margin, so the brim lands just above the eyebrows.
+      const lift = 0.02 * earDist + h / 2;
       return { cx: ref.x + up.x * lift, cy: ref.y + up.y * lift, w, h, angle, anchored: true };
     }
   }
@@ -124,8 +133,11 @@ function placeCap(pose: ScreenPose | null, vw: number, vh: number, aspect: numbe
 }
 
 /**
- * Hoodie / long-sleeve: width 1.6 × shoulder width, top edge 12% of the
+ * Hoodie / long-sleeve: width 1.95 × shoulder width, top edge 34% of the
  * shoulder width above the shoulders' midpoint, rotated by the shoulder line.
+ * The tracker's shoulders are the joints, well below the top of the shoulder
+ * and the neck: on a real person (23 Sep 2026) the old 1.6 / 12% put the
+ * neckline on the chest and the body narrower than theirs.
  */
 function placeGarment(pose: ScreenPose | null, vw: number, vh: number, aspect: number): Placement {
   if (pose && seen(pose.leftShoulder) && seen(pose.rightShoulder)) {
@@ -134,10 +146,10 @@ function placeGarment(pose: ScreenPose | null, vw: number, vh: number, aspect: n
       const angle = lineAngle(pose.leftShoulder, pose.rightShoulder);
       const sm = mid(pose.leftShoulder, pose.rightShoulder);
       const up = upVec(angle);
-      const w = 1.6 * sw;
+      const w = 1.95 * sw;
       const h = w * aspect;
-      const topX = sm.x + up.x * sw * 0.12;
-      const topY = sm.y + up.y * sw * 0.12;
+      const topX = sm.x + up.x * sw * 0.34;
+      const topY = sm.y + up.y * sw * 0.34;
       return {
         cx: topX - up.x * (h / 2),
         cy: topY - up.y * (h / 2),

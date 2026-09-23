@@ -105,19 +105,23 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   }, [snap]);
 
   const live = phase === "live";
-  // Phase 4, first step: the cap in 3D on the head, from face tracking. Behind
-  // ?cap3d=1 until it has been tried on real faces; if face tracking cannot
-  // start here, the 2D cap (body tracking) takes over for the visit.
+  // Phase 4, first step: the cap in 3D on the head, from face tracking. The
+  // default since it was tried on a real face (23 Sep 2026: far better than
+  // the flat cap, which sat high and shrank in profile); ?cap3d=0 brings the
+  // flat cap back, and if face tracking cannot start here, the flat cap
+  // (body tracking) takes over for the visit.
   const [cap3dWanted] = useState(
-    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("cap3d"),
+    () => typeof window === "undefined" || new URLSearchParams(window.location.search).get("cap3d") !== "0",
   );
   const [faceFailed, setFaceFailed] = useState(false);
   const [headSeen, setHeadSeen] = useState(false);
   const use3dCap = cap3dWanted && !faceFailed && product.id === "cap";
   // Phase 4, second step: the hoodie and long-sleeve fitted to the body
-  // (arms, the camera's light, the silhouette). Behind ?fit=1 for the same reason.
+  // (arms, the camera's light, the silhouette). The default since the same
+  // real-person try (its sleeves follow a raised arm; the flat one's do
+  // not); ?fit=0 brings the flat garments back.
   const [fitWanted] = useState(
-    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("fit"),
+    () => typeof window === "undefined" || new URLSearchParams(window.location.search).get("fit") !== "0",
   );
   const fitGarment = fitWanted && product.anchor !== "head";
   // The silhouette is on for the whole visit under ?fit=1 (only the garments

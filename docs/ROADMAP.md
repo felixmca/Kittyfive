@@ -221,8 +221,10 @@ to render on phones and easier to make charming.
       with six panels, a curved visor and Kitty's face embroidered on the
       front, placed on the forehead and sized to the face, turned with the
       head, an invisible head hiding its far side, lit from the video's own
-      brightness; in the photo too. Tested on posed heads only: needs a try on
-      a real face (Felix's phone) and then to become the default)*
+      brightness; in the photo too. 23 Sep evening: tried on Felix's real face
+      (Felix's screenshots as the camera), now wears the store's cap model at real
+      size, sits lower with a deeper crown, and is **the default**
+      (`?cap3d=0` for the flat cap). Still to tune on video)*
 - [ ] Hoodie and long-sleeve: pose + body segmentation; the garment is warped
       to shoulders, hips and elbows (thin-plate spline); the camera's own
       shading is multiplied through so folds show; arms occlude correctly
@@ -230,8 +232,9 @@ to render on phones and easier to make charming.
       (body grid shoulders → hem, sleeves shoulder → elbow → wrist with a bend),
       the video's normalised luminance multiplied through, trimmed to the
       PoseLandmarker segmentation mask when it covers the body, a forearm in
-      front of the body drawn over it. Tested on posed bodies only: needs a
-      try on a real person, then to become the default)*
+      front of the body drawn over it. 23 Sep evening: tried on a real person;
+      the shoulder line now sits above the tracker's shoulder joints and wider,
+      and it is **the default** (`?fit=0` for flat). Still to tune on video)*
 - [ ] Kitty stands next to you in 3D *(23 Sep: the drawn 3D cat now walks over
       and sits beside whoever is being tracked, turned towards them, and
       follows when they move; with your feet in the picture she sits on your

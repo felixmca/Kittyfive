@@ -63,12 +63,22 @@ localhost. The link you pasted contained a live sign-in token. Pressing
    so pictures now retry once under a fresh address and step aside if they
    still fail. The gold button no longer runs under the clock when you
    scroll: there is a dark strip under the status bar.
+5. **The try-on** (`/try-on`). Your screenshots showed the drawn cap too
+   small and too high (a button in profile), and the hoodie low and narrow.
+   I played your screenshots into a test browser as its camera, so the
+   site's own tracking ran on your real face and body. From that:
+   - **the cap is now 3D by default**: the store's cap model, at real size,
+     on your head, turning with it, the brim just above your eyebrows;
+   - **the hoodie and long-sleeve are fitted by default**: they start at your
+     collar, as wide as you, and a raised arm takes its sleeve with it;
+   - `?cap3d=0` and `?fit=0` bring the old flat versions back, if you
+     want to compare.
 
-**Photos of yourself for the try-on: yes, please.** The screenshots show
-what is wrong (the drawn cap too small and too high, tiny in profile; the
-hoodie low and narrow). The best way to fix it is to run the real tracking on
-you. Short phone videos are best: the test browser plays them as its camera,
-so the site's own code runs on you frame by frame. The shot list is in
+**Photos of yourself for the try-on: yes, please.** They are how the rest
+of the fitting gets done: your screenshots worked for a first pass, but the
+old overlay covers what the tracker needs. Short phone videos are best: the
+test browser plays them as its camera, so the site's own code runs on you
+frame by frame. The shot list is in
 `assets-raw/tryon/README.md`: a selfie turning your head, the same in any
 real cap, then standing back (head to hips) moving your arms, the same in a
 plain hoodie. They stay on your machine and are never committed or put
@@ -183,6 +193,34 @@ and tag. Her markings are painted from your photos and chapter 1's close-up.
 She has a rig and two clips, "Walk" (0.6 s, the pace the store walks her at)
 and "Idle", and the site turns her head to look at you when she stops. She is
 9k triangles, 350 KB.
+
+### 7 · The try-on, fitted to a real person
+
+Felix's screenshots, turned into a camera feed
+(`--use-file-for-fake-video-capture`), ran through the real MediaPipe
+tracking (see "Things this session learned").
+- **Cap.** The 3D cap (`Cap3D.tsx`) was right to exist: it turned with
+  the head where the flat one shrank. But its crown sat at the hairline and
+  was too shallow for real hair. It now wears the store's cap model
+  (`/models/merch-cap.glb`, metres converted to face widths, 14.5 cm) with
+  its band about a third of a face width below landmark 10, tipped back a
+  little, dyed the chosen colour; the drawn cap stands in while it loads.
+  It is the default (`?cap3d=0` for the flat one, which also takes over
+  by itself when face tracking cannot start). In full profile MediaPipe
+  loses the face and the page asks the wearer to look at the camera.
+- **Flat garments** (the fallback): width 1.95 × shoulder width (was 1.6),
+  top edge 34 % of it above the shoulders (was 12 %). The tracker's
+  shoulders are the joints, well below the neck, so the neckline had been
+  landing on the chest.
+- **Fitted garments** (`fitGarment.ts`): the shoulder line 20 % of the
+  shoulder width above the joints and 16 % outside them; sleeve roots at
+  the shoulder. The default now (`?fit=0` for flat); it already drops to
+  fewer pixels on a slow phone.
+- **The flat cap** (fallback): 2.25 × the head's width, and never smaller
+  than 1.7 × the eye-to-ear distance, so a turned head keeps its size.
+- Still to do with Felix's footage (`assets-raw/tryon/README.md`): tune
+  all of this on video, not stills; the store's hoodie and long-sleeve
+  models could replace the drawn garments in the fitted warp.
 
 ## Things this session learned the hard way
 
