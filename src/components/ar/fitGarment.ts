@@ -323,14 +323,29 @@ export class FittedGarment {
   private lastProbe = 0;
   /** Brightness gain that brings the picture's average to ~0.85. */
   private gain = 1.4;
+  /** Milliseconds a frame of this costs (smoothed); a slow phone gets fewer pixels. */
+  private cost = 0;
+  /** Drawn at full sharpness while it is cheap; 1× and coarser light when it is not. */
+  private slow = false;
+
+  /** For the verify harness: what a frame costs and whether it has dropped to 1×. */
+  stats(): { costMs: number; slow: boolean } {
+    return { costMs: Math.round(this.cost * 10) / 10, slow: this.slow };
+  }
 
   /** Draw `product` fitted to `pose` on `ctx` (already scaled for dpr). False when the pose is not enough. */
   draw(ctx: CanvasRenderingContext2D, pose: ScreenPose, product: Product, colour: string, o: FitOptions): boolean {
     const fit = fitTo(pose);
     if (!fit) return false;
+    const t0 = performance.now();
     const t = textures(product.id, colour, o.mirrored);
-    const pw = Math.max(1, Math.round(o.cw * o.dpr));
-    const ph = Math.max(1, Math.round(o.ch * o.dpr));
+    // Over ~12 ms a frame (the camera and tracking need the rest), drop to 1×
+    // resolution; back to full once it is well under.
+    if (this.cost > 12) this.slow = true;
+    else if (this.cost < 6) this.slow = false;
+    const scale = this.slow ? Math.min(1, o.dpr) : o.dpr;
+    const pw = Math.max(1, Math.round(o.cw * scale));
+    const ph = Math.max(1, Math.round(o.ch * scale));
     if (this.layer.width !== pw || this.layer.height !== ph) {
       this.layer.width = pw;
       this.layer.height = ph;
@@ -340,7 +355,7 @@ export class FittedGarment {
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = "source-over";
     g.clearRect(0, 0, pw, ph);
-    g.setTransform(o.dpr, 0, 0, o.dpr, 0, 0);
+    g.setTransform(scale, 0, 0, scale, 0, 0);
 
     // Behind the body: the sleeves (a forearm in front comes after it).
     fit.sleeves.forEach((s) => drawSleeve(g, s.left ? t.sleevePatched : t.sleeve, s, s.front ? "upper" : "both"));
@@ -356,8 +371,10 @@ export class FittedGarment {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 0.97;
-    ctx.drawImage(this.layer, 0, 0);
+    ctx.drawImage(this.layer, 0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.restore();
+    const spent = performance.now() - t0;
+    this.cost = this.cost ? this.cost * 0.9 + spent * 0.1 : spent;
     return true;
   }
 
@@ -427,9 +444,10 @@ export class FittedGarment {
         }
       }
     }
-    // Half resolution is plenty for light.
-    const lw = Math.max(1, Math.round(this.layer.width / 2));
-    const lh = Math.max(1, Math.round(this.layer.height / 2));
+    // Half resolution is plenty for light (a quarter on a slow phone).
+    const div = this.slow ? 4 : 2;
+    const lw = Math.max(1, Math.round(this.layer.width / div));
+    const lh = Math.max(1, Math.round(this.layer.height / div));
     if (this.light.width !== lw || this.light.height !== lh) {
       this.light.width = lw;
       this.light.height = lh;

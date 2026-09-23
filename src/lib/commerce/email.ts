@@ -1,72 +1,13 @@
 /**
- * Transactional email. Resend when RESEND_API_KEY + EMAIL_FROM are set,
- * otherwise a console.log no-op so the flow is visible in dev. Never throws
- * into the webhook: a failed email must not fail a paid order.
+ * Order emails. Sent through src/lib/mail.ts: Resend when RESEND_API_KEY +
+ * EMAIL_FROM are set, otherwise a console.log no-op so the flow is visible in
+ * dev. Never throws into the webhook: a failed email must not fail a paid order.
  */
-import { Resend } from "resend";
 import { SITE } from "@/config/site";
-import { getEnv, hasEmail } from "./env";
+import { deliver, esc, wrapHtml } from "@/lib/mail";
 import { formatPence } from "./format";
 import { describeItems, type OrderItemRow, type OrderRow } from "./orders";
 import type { Tracking } from "./types";
-
-interface Mail {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-}
-
-let resend: Resend | null = null;
-
-function esc(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function wrapHtml(title: string, bodyHtml: string): string {
-  return `<!doctype html><html lang="en-GB"><body style="margin:0;background:#0b0b0c;color:#f4f1ea;font-family:Inter,ui-sans-serif,system-ui,sans-serif;padding:32px 16px">
-<div style="max-width:520px;margin:0 auto">
-<p style="margin:0 0 8px;color:#ffd166;font-size:12px;letter-spacing:.14em;text-transform:uppercase">${esc(SITE.name)}</p>
-<h1 style="margin:0 0 20px;font-family:Fraunces,Georgia,serif;font-weight:300;font-size:28px;line-height:1.15">${esc(title)}</h1>
-${bodyHtml}
-<p style="margin:28px 0 0;color:#9a958c;font-size:13px">${esc(SITE.tagline)} · <a href="${esc(SITE.url)}" style="color:#9a958c">${esc(SITE.url.replace(/^https?:\/\//, ""))}</a></p>
-</div></body></html>`;
-}
-
-async function deliver(mail: Mail): Promise<{ sent: boolean; id?: string }> {
-  const env = getEnv();
-  if (!hasEmail(env) || !env.resendApiKey || !env.emailFrom) {
-    // Production logs must not carry customer PII; locally the body is useful.
-    if (process.env.NODE_ENV === "production") {
-      console.log(`[email:noop] subject="${mail.subject}" (RESEND_API_KEY unset; nothing sent)`);
-    } else {
-      console.log(`[email:noop] to=${mail.to} subject="${mail.subject}"\n${mail.text}`);
-    }
-    return { sent: false };
-  }
-  try {
-    resend ??= new Resend(env.resendApiKey);
-    const { data, error } = await resend.emails.send({
-      from: env.emailFrom,
-      to: mail.to,
-      subject: mail.subject,
-      text: mail.text,
-      html: mail.html,
-    });
-    if (error) {
-      console.error("[email] resend error:", error);
-      return { sent: false };
-    }
-    return { sent: true, id: data?.id };
-  } catch (err) {
-    console.error("[email] failed:", err);
-    return { sent: false };
-  }
-}
 
 const KITTY_SAYS = "Kitty says: fine, I suppose.";
 

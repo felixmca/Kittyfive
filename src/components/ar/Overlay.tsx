@@ -21,7 +21,7 @@ import type { PersonMask } from "./useLandmarks";
 
 interface FitWindow extends Window {
   /** Debug/verify: pose a body without a camera (normalised video landmarks), and read what was drawn. */
-  __fit?: { setPose: (lm: Landmarks | null) => void; state: () => { fitted: boolean } };
+  __fit?: { setPose: (lm: Landmarks | null) => void; state: () => { fitted: boolean; costMs: number; slow: boolean } };
 }
 
 interface OverlayProps {
@@ -76,7 +76,7 @@ export default function Overlay({
         setPose: (lm) => {
           forced = lm;
         },
-        state: () => ({ fitted: lastFitted }),
+        state: () => ({ fitted: lastFitted, ...garment.stats() }),
       };
     }
     const fallbackAspect = PROCEDURAL_ASPECT[product.id];

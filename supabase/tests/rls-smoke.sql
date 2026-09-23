@@ -116,6 +116,79 @@ begin
   perform count(*) from public.story_reports; -- admins may read reports
 end $$;
 
+-- ── story subscriptions (Phase 5) ────────────────────────────────────────
+-- The stranger subscribes themselves, sees only their own row, never a token,
+-- and cannot invite anyone or ask who to email.
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
+do $$
+declare n integer; kitty uuid;
+begin
+  select id into kitty from public.pets where slug = 'kitty';
+  if public.subscribe_me(kitty) <> 'active' then raise exception 'stranger could not subscribe'; end if;
+  select count(*) into n from public.story_subscriptions;
+  if n <> 1 then raise exception 'stranger sees % subscriptions (expected only their own)', n; end if;
+  begin
+    perform s.token from public.story_subscriptions s;
+    raise exception 'stranger can read subscription tokens';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.story_subscriptions (pet_id, email, source) values (kitty, 'sneaky@example.com', 'self');
+    raise exception 'stranger inserted a subscription directly';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.invite_subscriber(kitty, 'friend@example.com');
+    raise exception 'stranger invited someone to Kitty''s stories';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.chapter_recipients((select id from public.chapters where slug = 'a-cold-night'));
+    raise exception 'stranger got Kitty''s subscriber list';
+  exception when insufficient_privilege then null;
+  end;
+  perform public.unsubscribe_me(kitty);
+  if (select status from public.story_subscriptions) <> 'unsubscribed' then raise exception 'unsubscribe_me did not stop it'; end if;
+  perform public.subscribe_me(kitty);
+end $$;
+
+-- The unconfirmed address cannot subscribe (the account's confirmation is the opt-in).
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
+do $$
+begin
+  begin
+    perform public.subscribe_me((select id from public.pets where slug = 'kitty'));
+    raise exception 'an unconfirmed address subscribed';
+  exception when invalid_authorization_specification then null;
+  end;
+end $$;
+
+-- The admin invites (pending until the link is used), and a chapter is emailed once.
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
+do $$
+declare n integer; kitty uuid; t text; ch uuid;
+begin
+  select id into kitty from public.pets where slug = 'kitty';
+  select i.token into t from public.invite_subscriber(kitty, '  RLS-Friend@Example.com ') i;
+  if t is null or char_length(t) <> 64 then raise exception 'an invitation gave no token'; end if;
+  if (select i.token from public.invite_subscriber(kitty, 'rls-friend@example.com') i) is distinct from t then
+    raise exception 'inviting again did not give the same link';
+  end if;
+  if (select s.status from public.story_subscriptions s where s.email = 'rls-friend@example.com') <> 'pending' then
+    raise exception 'an invitation is not pending';
+  end if;
+  perform set_config('rls.token', t, true);
+  select c.id into ch from public.chapters c where c.pet_id = kitty and c.status = 'published' and c.notified_at is null limit 1;
+  select count(*) into n from public.chapter_recipients(ch) r where r.email = 'rls-stranger@example.com';
+  if n <> 1 then raise exception 'the subscribed stranger is not among the recipients'; end if;
+  select count(*) into n from public.chapter_recipients(ch);
+  if n <> 0 then raise exception 'a chapter could be emailed twice (% recipients again)', n; end if;
+  perform public.log_story_email(
+    (select s.id from public.story_subscriptions s where s.email = 'rls-stranger@example.com'), ch, 'chapter', 'sent', 'rls-test');
+  select count(*) into n from public.story_emails e where e.chapter_id = ch;
+  if n < 1 then raise exception 'the send log is not readable by the admin'; end if;
+end $$;
+
 -- ── anonymous visitors do not see drafts ─────────────────────────────────
 reset role;
 set local role anon;
@@ -147,6 +220,23 @@ begin
   begin
     insert into public.story_reports (kind, report) values ('summary', '{}'::jsonb);
     raise exception 'anon wrote a story report directly';
+  exception when insufficient_privilege then null;
+  end;
+  -- Subscriptions: anyone holding a link's token may confirm or stop it; nothing else.
+  select count(*) into n from public.confirm_subscription(current_setting('rls.token')) c where c.status = 'active';
+  if n <> 1 then raise exception 'the invitation link did not confirm'; end if;
+  select count(*) into n from public.unsubscribe_by_token(current_setting('rls.token')) u where u.status = 'unsubscribed';
+  if n <> 1 then raise exception 'the unsubscribe link did not stop it'; end if;
+  select count(*) into n from public.confirm_subscription(repeat('0', 64));
+  if n <> 0 then raise exception 'a made-up token confirmed something'; end if;
+  begin
+    select count(*) into n from public.story_subscriptions;
+    raise exception 'anon can read subscriptions';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.subscribe_me((select id from public.pets where slug = 'kitty'));
+    raise exception 'anon ran subscribe_me';
   exception when insufficient_privilege then null;
   end;
 end $$;

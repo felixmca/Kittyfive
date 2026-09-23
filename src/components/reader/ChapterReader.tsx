@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Chrome from "@/components/chrome/Chrome";
 import { CHROME_TOP, CLEAR_OF_HOME } from "@/components/chrome/layout";
+import SubscribeCard from "@/components/stories/SubscribeCard";
 import TileFace from "@/components/stories/TileFace";
 import ReaderScene, { type SceneRegistry } from "./ReaderScene";
 import { SITE } from "@/config/site";
@@ -232,7 +233,7 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
           if (!chapter) return null;
           return <ChapterBlock key={r.chapterId} entry={r} chapter={chapter} registry={registry} />;
         })}
-        {range.end === reading.length - 1 ? <TheEnd petName={pet.name} /> : <Loading />}
+        {range.end === reading.length - 1 ? <TheEnd petName={pet.name} petId={pet.id} /> : <Loading />}
       </main>
     </>
   );
@@ -324,7 +325,7 @@ function Loading() {
   );
 }
 
-function TheEnd({ petName }: { petName: string }) {
+function TheEnd({ petName, petId }: { petName: string; petId: string }) {
   return (
     <section className="flex min-h-[80dvh] flex-col items-center justify-center gap-6 px-6 text-center" data-reader-end>
       <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-accent">The end, for now</p>
@@ -342,6 +343,7 @@ function TheEnd({ petName }: { petName: string }) {
       <Link href="/" className="text-[14px] text-muted underline-offset-4 hover:text-fg hover:underline">
         Back to the start of {petName}&apos;s story
       </Link>
+      <SubscribeCard petId={petId} petName={petName} className="mt-6 w-full max-w-[520px] text-left" />
     </section>
   );
 }

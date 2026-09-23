@@ -21,6 +21,8 @@ import { SITE } from "@/config/site";
 import { useAuth } from "@/lib/auth/store";
 import { useUi } from "@/lib/store";
 import { storiesBackend } from "@/lib/stories/client";
+import SubscribeCard from "@/components/stories/SubscribeCard";
+import SubscribersPanel from "@/components/stories/SubscribersPanel";
 import {
   readingOrder,
   storyDateText,
@@ -307,6 +309,8 @@ export default function StoriesClient({ initial }: { initial: PetStories }) {
           ) : null}
         </header>
 
+        {canEdit ? <SubscribersPanel stories={stories} /> : null}
+
         <ol className="mt-12 flex flex-col gap-14" aria-label="Volumes">
           {stories.volumes.map((volume, index) => (
             <li key={volume.id}>
@@ -337,7 +341,9 @@ export default function StoriesClient({ initial }: { initial: PetStories }) {
           </button>
         ) : null}
 
-        <footer className="mx-auto mt-20 flex max-w-[640px] flex-col gap-3">
+        <SubscribeCard petId={stories.pet.id} petName={stories.pet.name} className="mx-auto mt-20 max-w-[640px]" />
+
+        <footer className="mx-auto mt-6 flex max-w-[640px] flex-col gap-3">
           <Link href="/" className={FOOT_LINK}>
             <span className="font-display text-xl font-light">Back to the story</span>
             <Arrow back />

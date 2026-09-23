@@ -300,3 +300,28 @@ Like the 3D cap, it was built and tested on posed bodies only (screenshots in
 the harness), so it stays behind the switch until you have tried it. Tell the
 next session what looks wrong (too wide, sleeves too thick, hem too long) and
 it becomes the default. Without the switch nothing changes.
+
+### 13 · Phase 5: new chapters by email (built, off until there is a domain)
+
+With Phases 1–4 built and waiting on you, I built the email subscriptions so
+they are ready the day there is a domain. Nothing has been sent to anyone.
+
+- **Readers**: at the bottom of /stories and at the end of the chapter reader,
+  "Kitty's new chapters, by email". Signed in, it is one press (the account's
+  confirmed email is the opt-in); signed out, it points to sign-in.
+- **You** (signed in, on /stories): a "New chapters by email" panel. How many
+  are subscribed, invited or stopped; invite someone by address (they get
+  one email and nothing else unless they press Confirm; someone who stopped
+  is never invited again); and each published chapter with **Email it**,
+  which works once per chapter. "See the email" shows what it looks like.
+- Every email has a one-click way to stop (in the email and in the mail
+  app's own unsubscribe button). The link pages ask for a press first,
+  because mail scanners open links.
+- The database keeps a send log and does all the checking (30 invitations a
+  day, one send per chapter, nobody reads anyone's link tokens); the RLS
+  smoke test proves it.
+
+**To switch it on:** a domain (Resend cannot send from vercel.app), verified
+in Resend, then `RESEND_API_KEY` and `EMAIL_FROM` on Vercel. Until then the
+panel says sending is off and the buttons are disabled, so no chapter's one
+send is used up for nothing.

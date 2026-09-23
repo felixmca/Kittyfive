@@ -655,6 +655,65 @@ const tileTitles = (page, slug) =>
     tiles.map((t) => (t.querySelector("h3, h2")?.textContent ?? t.textContent ?? "").replace(/\s+/g, " ").trim()),
   );
 
+/**
+ * Phase 5 in demo mode (this browser only, nothing sent, no production data):
+ * a reader subscribes, the owner sees them, invites someone, and emails a
+ * chapter once. Then the pages behind the email links ask before acting.
+ */
+async function journeySubscriptions(browser, viewport) {
+  const route = "/stories (email, demo)";
+  await withPage(browser, viewport, async (page, errors, bad) => {
+    await page.addInitScript((owner) => {
+      if (!sessionStorage.getItem("verify-seeded")) {
+        localStorage.removeItem("kittyfive-demo-subscriptions-v1");
+        localStorage.setItem("kittyfive-demo-auth", JSON.stringify(owner));
+        sessionStorage.setItem("verify-seeded", "1");
+      }
+    }, DEMO_OWNER);
+    page.on("dialog", (d) => void d.accept());
+    await goto(page, "/stories?demo=1");
+    const card = await page.waitForSelector('[data-subscribe="off"]', { timeout: 20_000 }).catch(() => null);
+    record(viewport.name, route, "readers are offered new chapters by email", !!card);
+    if (!card) return;
+    await page.click("[data-subscribe-toggle]");
+    const on = await page.waitForSelector('[data-subscribe="on"]', { timeout: 10_000 }).catch(() => null);
+    const note = await page.$eval("[data-subscribe-note]", (el) => el.textContent ?? "").catch(() => "");
+    record(viewport.name, route, "one press subscribes (and says demo sends nothing)", !!on && /demo/i.test(note), note.slice(0, 70));
+
+    const panel = await page.waitForSelector("[data-subscribers]", { timeout: 15_000 }).catch(() => null);
+    record(viewport.name, route, "the owner sees the email panel", !!panel);
+    if (!panel) return;
+    await page.click("[data-subscribers] summary");
+    await page.waitForFunction(() => /1 subscribed/.test(document.querySelector("[data-subscriber-counts]")?.textContent ?? ""), null, { timeout: 10_000 }).catch(() => {});
+    const counts1 = await page.$eval("[data-subscriber-counts]", (el) => el.textContent ?? "");
+    record(viewport.name, route, "the owner sees the new subscriber", /1 subscribed/.test(counts1), counts1);
+
+    await page.fill("#invite-email", "Friend@Example.com");
+    await page.click('[data-invite-form] button[type="submit"]');
+    await page.waitForFunction(() => /1 invited/.test(document.querySelector("[data-subscriber-counts]")?.textContent ?? ""), null, { timeout: 10_000 }).catch(() => {});
+    const counts2 = await page.$eval("[data-subscriber-counts]", (el) => el.textContent ?? "");
+    record(viewport.name, route, "an invitation is pending until they confirm", /1 invited/.test(counts2), counts2);
+
+    const first = await page.$("[data-notify-chapter] [data-notify]");
+    if (first) await first.click();
+    await page.waitForSelector("[data-notify-chapter] [data-notified]", { timeout: 10_000 }).catch(() => {});
+    const emailed = await page.$$eval("[data-notify-chapter] [data-notified]", (els) => els.length);
+    record(viewport.name, route, "a chapter is emailed once, then says when", !!first && emailed === 1, `${emailed} emailed`);
+    await page.screenshot({ path: join(OUT, `subscriptions-${viewport.name}.png`), fullPage: false });
+
+    await goto(page, "/unsubscribe?t=" + "0".repeat(64));
+    const button = await page.waitForSelector("[data-email-link-button]", { timeout: 15_000 }).catch(() => null);
+    const state = await page.$eval("[data-email-link]", (el) => el.getAttribute("data-state")).catch(() => null);
+    record(viewport.name, route, "the unsubscribe link asks for a press (opening it changes nothing)", !!button && state === "idle", String(state));
+    await goto(page, "/subscribe/confirm?t=short");
+    const broken = await page.$eval("[data-email-link]", (el) => el.textContent ?? "").catch(() => "");
+    record(viewport.name, route, "a cut-off link says so", /not complete/.test(broken));
+
+    record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+    record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+  });
+}
+
 async function journeyStoriesOwner(browser, viewport) {
   const route = "/stories (owner, demo)";
   await withPage(browser, viewport, async (page, errors, bad) => {
@@ -975,6 +1034,16 @@ async function apiChecks() {
   const card = await fetch(`${BASE}/opengraph-image.jpg`);
   const size = Number(card.headers.get("content-length") ?? (await card.arrayBuffer()).byteLength);
   record(viewport, "/", "share card: og:image tag and a JPEG under 300 KB", og && card.status === 200 && size > 10_000 && size < 300_000, `${card.status}, ${Math.round(size / 1024)} KB`);
+  // Story emails (Phase 5): the preview renders; nothing sends or marks a chapter without email set up or a signed-in owner.
+  const mailStatus = await get("/api/subscriptions/status");
+  const mailOn = /"email":true/.test(mailStatus.text);
+  record(viewport, "/api/subscriptions/status", "says whether email is set up", mailStatus.status === 200 && /"email":(true|false)/.test(mailStatus.text), mailStatus.text);
+  const preview = await get("/api/subscriptions/preview");
+  record(viewport, "/api/subscriptions/preview", "a chapter email renders (picture, link, a way to stop)", preview.status === 200 && /Read the chapter/.test(preview.text) && /Stop these emails/.test(preview.text), String(preview.status));
+  const notify = await fetch(`${BASE}/api/subscriptions/notify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chapterId: "00000000-0000-0000-0000-000000000000" }) });
+  record(viewport, "/api/subscriptions/notify", "refuses without email set up (503) or without a signed-in owner (401)", notify.status === (mailOn ? 401 : 503), String(notify.status));
+  const stop = await fetch(`${BASE}/api/subscriptions/unsubscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "nope" }) });
+  record(viewport, "/api/subscriptions/unsubscribe", "a malformed token is refused", stop.status === 400, String(stop.status));
   const manifest = await get("/manifest.webmanifest");
   record(viewport, "/manifest.webmanifest", "home-screen app manifest with Kitty's icons", manifest.status === 200 && /"icon-512\.png"|icon-512\.png/.test(manifest.text) && /<link rel="manifest"/.test(home.text), String(manifest.status));
 }
@@ -1004,7 +1073,7 @@ async function main() {
   const JOURNEYS = {
     landing: [journeyLanding, journeyLandingReduced],
     store: [journeyStore],
-    stories: [journeyStories, journeyReader, journeyStoriesOwner],
+    stories: [journeyStories, journeyReader, journeyStoriesOwner, journeySubscriptions],
     tryon: [journeyTryOn, journeyCap3D, journeyFit],
     admin: [journeyAdmin],
     pages: [journeyPages],

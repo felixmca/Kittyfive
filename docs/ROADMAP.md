@@ -36,8 +36,8 @@ The three pillars, in Kitty's words:
 | **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 swipe landing live with chapters 1–2; 3–4 play designed stand-ins until their clips land |
 | **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built, deployed and tested end to end in demo mode (23 Sep); waiting on Felix's sign-up for the live studio test |
 | **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room, garden and Kitty photos ([Handover 04](HANDOVER-04-STORE-PHOTOS.md)) | 🟡 chat on the real key + Kitty Tunables live; the house waits for the photos |
-| **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | Wear the cap once (`/try-on?cap3d=1`) | 🟡 3D cap built behind a switch; garments next |
-| **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | ⬜ |
+| **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | Try the cap (`/try-on?cap3d=1`) and the hoodie (`/try-on?fit=1`) | 🟡 3D cap and fitted garments built behind switches; waiting on a real person |
+| **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | 🟡 built and verified in demo mode (23 Sep); sending off until the domain |
 | **6 · Kitty's store takes money** | Printful UK, Stripe live, order emails | Stripe, Printful, Vercel Pro, Supabase Pro | ⬜ |
 | **7 · Your pet, your story** | Anyone signs up and makes their own pet's stories | Licence choice; generation budget | ⬜ |
 | **8 · Stores for everyone** | £19/month store subscription with payouts | Stripe Billing + Connect | ⬜ |
@@ -228,16 +228,32 @@ to render on phones and easier to make charming.
 ## Phase 5 · Subscribe to Kitty Stories by email
 
 Starts only after Phases 1–4 (landing story, store, stories page, try-on).
+*(23 Sep: with Phases 1–4 built and waiting on Felix, the code went in, off
+until there is a domain: `story_subscriptions` + `story_emails` behind checked
+functions, `src/lib/subscriptions/`, `/api/subscriptions/*`, the reader's card
+on /stories and at the end of the reader, the owner's panel on /stories,
+`/subscribe/confirm` and `/unsubscribe`. Demo mode does it all in the browser;
+live, sending answers 503 until `RESEND_API_KEY` + `EMAIL_FROM` are set.)*
 
 - [ ] A domain for the site and for sending mail (Resend needs a verified
       domain; `vercel.app` cannot be verified)
 - [ ] Supabase Auth sends through Resend SMTP (the built-in mailer sends about
       two emails an hour for the whole project; lesson from Birthday Lobby)
-- [ ] Signed-in visitors subscribe to a pet's stories; owners invite people by
-      email (double opt-in)
-- [ ] Publishing a chapter emails subscribers once: tile image, title, link;
-      one-click unsubscribe and `List-Unsubscribe` headers
-- [ ] Send log, bounce handling, rate limits
+- [x] Signed-in visitors subscribe to a pet's stories (their confirmed
+      account email is the opt-in); owners invite people by email (double
+      opt-in: pending until they press Confirm; never re-invites someone who
+      said no)
+- [x] Publishing a chapter emails subscribers once (the owner presses "Email
+      it"; the database marks the chapter in the same statement that hands over
+      the list): tile image, title, link; one-click unsubscribe with
+      `List-Unsubscribe` + `List-Unsubscribe-Post`; link pages ask for a press
+      (mail scanners open links)
+- [x] Send log (`story_emails`), rate limits (30 invitations a day a pet, API
+      limits per visitor)
+- [ ] Bounce handling: Resend already suppresses hard bounces itself; marking
+      them `bounced` here needs its webhook (and a server secret key on Vercel)
+- [ ] First real send once the domain and Resend are set up (then invite
+      yourself from /stories and email a chapter)
 
 ## Phase 6 · Kitty's store takes real money
 
