@@ -12,6 +12,7 @@
  */
 import { SITE } from "@/config/site";
 import { esc, wrapHtml, type Mail } from "@/lib/mail";
+import { mediaUrl } from "@/lib/supabase/config";
 
 const BUTTON =
   "display:inline-block;background:#ffd166;color:#141414;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:999px";
@@ -79,8 +80,12 @@ export function chapterEmail(o: { to: string; token: string; chapter: ChapterFor
     `---`,
     `Stop these emails: ${stop}`,
   ].join("\n");
-  const picture = c.image
-    ? `<a href="${esc(read)}" style="display:block;margin:0 0 20px"><img src="${esc(siteUrl(c.image))}" alt="" width="520" style="display:block;width:100%;max-width:520px;height:auto;border-radius:18px;border:0"></a>`
+  // Stored as a site path, a full URL or a storage-bucket path; only a real
+  // web address can go in an email (never a demo data: URL).
+  const src = mediaUrl(c.image);
+  const image = src && /^(https?:|\/)/.test(src) ? siteUrl(src) : null;
+  const picture = image
+    ? `<a href="${esc(read)}" style="display:block;margin:0 0 20px"><img src="${esc(image)}" alt="" width="520" style="display:block;width:100%;max-width:520px;height:auto;border-radius:18px;border:0"></a>`
     : "";
   const html = wrapHtml(
     c.title,

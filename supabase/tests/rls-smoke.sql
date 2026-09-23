@@ -183,8 +183,13 @@ begin
   if n <> 1 then raise exception 'the subscribed stranger is not among the recipients'; end if;
   select count(*) into n from public.chapter_recipients(ch);
   if n <> 0 then raise exception 'a chapter could be emailed twice (% recipients again)', n; end if;
+  -- Nothing sent yet: the owner may give the chapter its send back, and send again.
+  if not public.chapter_notify_failed(ch) then raise exception 'a send where nothing went out could not be retried'; end if;
+  select count(*) into n from public.chapter_recipients(ch);
+  if n < 1 then raise exception 'the retried chapter has no recipients'; end if;
   perform public.log_story_email(
     (select s.id from public.story_subscriptions s where s.email = 'rls-stranger@example.com'), ch, 'chapter', 'sent', 'rls-test');
+  if public.chapter_notify_failed(ch) then raise exception 'a chapter that was sent could be sent again'; end if;
   select count(*) into n from public.story_emails e where e.chapter_id = ch;
   if n < 1 then raise exception 'the send log is not readable by the admin'; end if;
 end $$;

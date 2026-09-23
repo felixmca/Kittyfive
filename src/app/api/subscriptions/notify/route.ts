@@ -6,7 +6,8 @@
  *
  * Body: { chapterId }. Auth: Authorization: Bearer <access token> of an
  * editor of the pet. Refuses (503) before marking anything when email is not
- * set up, so the one send is not used up by a deployment that cannot send.
+ * set up, so the one send is not used up by a deployment that cannot send;
+ * and if not one email goes out, chapter_notify_failed() gives it back.
  */
 import { deliverBatch, mailConfigured } from "@/lib/mail";
 import { clientKey, rateLimit } from "@/lib/rateLimit";
@@ -91,5 +92,10 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
   const sent = results.filter((r) => r.sent).length;
+  if (recipients.length > 0 && sent === 0) {
+    // Nothing went out: give the chapter its one send back, and say so.
+    await as.sb.rpc("chapter_notify_failed", { p_chapter: chapterId });
+    return json({ error: "not-sent", message: "None of the emails went out, so you can try again later.", recipients: recipients.length, sent }, 502);
+  }
   return json({ recipients: recipients.length, sent });
 }
