@@ -382,5 +382,10 @@ send is used up for nothing.
   you, instead of at the bottom of the screen. In a selfie she stays where
   she was.- **Delete my account** on /account (type DELETE to confirm): deletes the
   sign-in and the person's story subscriptions, only ever their own
-  (`delete_my_account()`, covered by the RLS smoke test).
+  (`delete_my_account()`, covered by the RLS smoke test).- **On a weak signal the story no longer stops for good.** If some frames
+  never arrive (tested by making six of chapter 1's frames hang), it used to
+  wait at that spot forever; now each download gives up after 15 s and is
+  retried behind the others, and playback waits at most 2.5 s before
+  playing on past the gap. Same idea in the store's chat: a reply that stops
+  arriving ends after 25 s, keeping whatever Kitty had already said.
 
