@@ -1,6 +1,6 @@
 # Kittyfive roadmap
 
-*Last updated 23 Sep 2026 (day session). This is the plan every session starts
+*Last updated 23 Sep 2026 (day session, afternoon). This is the plan every session starts
 from: find the first unchecked box in the current phase, do it, tick it,
 deploy. The day session's log and its note for Felix are in
 [Handover 03](HANDOVER-03-DAY.md); what to photograph for the store is
@@ -35,11 +35,11 @@ The three pillars, in Kitty's words:
 | **0 · Foundation** | Story engine, store, try-on, commerce adapters, verify harness, research | — | ✅ done 21–22 Sep |
 | **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 swipe landing live with chapters 1–2; 3–4 play designed stand-ins until their clips land |
 | **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built, deployed and tested end to end in demo mode (23 Sep); waiting on Felix's sign-up for the live studio test |
-| **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room, garden and Kitty photos ([Handover 04](HANDOVER-04-STORE-PHOTOS.md)) | 🟡 chat on the real key + Kitty Tunables live; the house waits for the photos |
+| **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room, garden and Kitty photos ([Handover 04](HANDOVER-04-STORE-PHOTOS.md)) | 🟡 chat on the real key + Kitty Tunables live; day/evening, garden, wandering Kitty with the camera following, adaptive resolution (1.7 s to first picture on emulated 4G); the Blender house waits for the photos |
 | **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | Try the cap (`/try-on?cap3d=1`) and the hoodie (`/try-on?fit=1`) | 🟡 3D cap and fitted garments built behind switches; waiting on a real person |
 | **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | 🟡 built and verified in demo mode (23 Sep); sending off until the domain |
 | **6 · Kitty's store takes money** | Printful UK, Stripe live, order emails | Stripe, Printful, Vercel Pro, Supabase Pro | ⬜ |
-| **7 · Your pet, your story** | Anyone signs up and makes their own pet's stories | Licence choice; generation budget | ⬜ |
+| **7 · Your pet, your story** | Anyone signs up and makes their own pet's stories | Licence choice; generation budget | 🟡 self-hosting guide written (23 Sep); onboarding waits on the licence and hosting decisions |
 | **8 · Stores for everyone** | £19/month store subscription with payouts | Stripe Billing + Connect | ⬜ |
 | **9 · WhatsApp tier** | New chapters by WhatsApp for subscribers | WhatsApp Business number | ⬜ |
 | **10 · Where is Kitty** | BLE beacon → Kitty's live position in the 3D house | ~£40 of parts | ⬜ |
