@@ -81,7 +81,7 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   const [snap, setSnap] = useState<SnapResult | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const capCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -469,8 +469,9 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
   // -------------------------------------------------------------- render
 
   return (
-    <div
+    <main
       ref={containerRef}
+      aria-label="Try it on"
       className="fixed inset-0 select-none overflow-hidden bg-[#0b0b0c] text-[#f4f1ea]"
     >
       {/* camera */}
@@ -721,6 +722,6 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

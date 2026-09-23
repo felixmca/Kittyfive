@@ -136,7 +136,8 @@ export default function ChatDock() {
         data-lenis-prevent
         className="glass mb-2 flex max-h-[55dvh] w-full flex-col overflow-hidden rounded-3xl text-fg"
       >
-        <header className="flex items-center justify-between border-b border-white/10 px-4 py-2">
+        {/* A div, not <header>: inside the dialog a header would read as a second page banner. */}
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <CatMark />
             <span className="font-display text-base">Kitty</span>
@@ -161,7 +162,7 @@ export default function ChatDock() {
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
-        </header>
+        </div>
 
         <div
           ref={listRef}
