@@ -83,6 +83,8 @@ const SPLASH_AFTER_MS = 400;
 const CHAT_WAIT_MS = 3000;
 /** After this, start with whatever has arrived; playback waits for the rest frame by frame. */
 const START_ANYWAY_MS = 7000;
+/** Still nothing of chapter 1 but its last frame: start with that. */
+const VERY_LATE_MS = 15000;
 /**
  * Playing on waits for the next frame, but not for ever: after this long the
  * story moves on with the nearest frame it has (a frame lost to a weak signal
@@ -209,13 +211,14 @@ export class SwipeEngine {
     else chatDone();
     this.chatTimer = window.setTimeout(chatDone, CHAT_WAIT_MS);
     this.watchdog = window.setTimeout(this.onMedia, START_ANYWAY_MS + 50);
+    this.cleanups.push(((t) => () => window.clearTimeout(t))(window.setTimeout(this.onMedia, VERY_LATE_MS + 50)));
 
     await this.media.init();
     if (this.destroyed) return;
     this.tl = buildTimeline(this.chapters, this.media.clips, this.reduced);
     this.placeRailDots();
     this.cleanups.push(this.media.subscribe(this.onMedia));
-    void this.media.loadFinals();
+    void this.media.loadFinals(this.reduced);
     this.updateResidency();
     this.onMedia();
   }
@@ -257,7 +260,10 @@ export class SwipeEngine {
     // Reduced motion shows stills with the captions set: after the grace
     // period the words alone are better than a splash.
     if (this.reduced) return this.media.hasFinal(0) || late;
-    if (late) return this.media.decodedPrefix(0) > 0 || this.media.hasFinal(0);
+    // Late, start with the chapter's first frame if there is one; its last
+    // frame (the end of the chapter, shown first) only as a last resort.
+    const veryLate = performance.now() - this.bootAt > VERY_LATE_MS;
+    if (late) return this.media.decodedPrefix(0) > 0 || (veryLate && this.media.hasFinal(0));
     if (!this.chatReady && tl.spans.some((s) => s.enter === "whatsapp")) return false;
     const n = first.clip.frames;
     if (this.media.decodedPrefix(0) < Math.min(n, 4)) return false;

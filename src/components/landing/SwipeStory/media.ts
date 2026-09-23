@@ -37,6 +37,9 @@ const INDEX_URL = "/story/index.json";
 /** Give up on the index or a manifest after this long (the story then plays stand-ins). */
 const META_TIMEOUT_MS = 9000;
 const FETCH_TRIES = 3;
+/** Chapter 1's final frame waits at most this long for its first frames; the other chapters' finals wait for all of them. */
+const FINAL1_WAIT_MS = 6000;
+const FINALS_WAIT_MS = 8000;
 const DECODE_TRIES = 2;
 
 /** Where the playhead is and where it is going; the window follows it. */
@@ -185,29 +188,64 @@ export class StoryMedia {
     this.wanted = this.clips.map(() => new Set<number>());
   }
 
-  /** Fetch every chapter's final frame (decoded and kept). Chapter 1's first. */
-  loadFinals(): Promise<void> {
+  /**
+   * Fetch every chapter's final frame (decoded and kept), without taking
+   * bandwidth from the frames about to play: chapter 1's final once its
+   * first dozen frames are in (FINAL1_WAIT_MS at most), the other chapters'
+   * once chapter 1's frames are all in (FINALS_WAIT_MS at most). On a slow
+   * connection the story's first picture is then its first frame, not the
+   * end of chapter 1. `stillsOnly` (reduced motion: no clip frames are
+   * fetched, the finals are the pictures) loads them all at once.
+   */
+  async loadFinals(stillsOnly = false): Promise<void> {
     const { signal } = this.abort;
-    return Promise.all(
-      this.chapters.map(async (ch) => {
-        if (!ch) return;
-        const last = ch.clip.frames;
-        for (let attempt = 0; attempt < FETCH_TRIES && !ch.final; attempt++) {
-          try {
-            const img = await loadFrame(frameUrl(ch.dir, ch.pattern, last, ch.version), signal);
-            if (signal.aborted || this.destroyed) {
-              releaseFrame(img);
-              return;
-            }
-            ch.final = img;
-            this.emit();
-          } catch {
-            if (signal.aborted) return;
-            await wait(400 * (attempt + 1));
+    const one = async (ch: ChapterFrames | null) => {
+      if (!ch) return;
+      const last = ch.clip.frames;
+      for (let attempt = 0; attempt < FETCH_TRIES && !ch.final; attempt++) {
+        try {
+          const img = await loadFrame(frameUrl(ch.dir, ch.pattern, last, ch.version), signal);
+          if (signal.aborted || this.destroyed) {
+            releaseFrame(img);
+            return;
           }
+          ch.final = img;
+          this.emit();
+        } catch {
+          if (signal.aborted) return;
+          await wait(400 * (attempt + 1));
         }
-      }),
-    ).then(() => undefined);
+      }
+    };
+    const [first, ...rest] = this.chapters;
+    const n = first?.clip.frames ?? 0;
+    if (stillsOnly) {
+      await Promise.all(this.chapters.map(one));
+      return;
+    }
+    await this.until(() => !first || this.fetchedPrefix(0) >= Math.min(n, 12), FINAL1_WAIT_MS);
+    if (this.destroyed) return;
+    await one(first ?? null);
+    await this.until(() => !first || this.fetchedPrefix(0) >= n, FINALS_WAIT_MS);
+    if (this.destroyed) return;
+    await Promise.all(rest.map(one));
+  }
+
+  /** Resolves once `ready()` holds (checked whenever something lands) or after `ms`. */
+  private until(ready: () => boolean, ms: number): Promise<void> {
+    if (ready()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.listeners.delete(check);
+        resolve();
+      };
+      const check = () => {
+        if (ready()) done();
+      };
+      const timer = setTimeout(done, ms);
+      this.listeners.add(check);
+    });
   }
 
   // ─── the window ───────────────────────────────────────────────────────────
