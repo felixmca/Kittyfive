@@ -8,8 +8,12 @@
  * the link's parameters before the Supabase client consumed them, which is
  * how a visitor arriving from a reset link gets the "new password" form
  * instead of a signed-in page with nothing changed.
+ *
+ * ?next=/some/page (a path on this site) sends a visitor back there once they
+ * are signed in: "Sign in to get them" on /stories comes back to /stories.
  */
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Chrome from "@/components/chrome/Chrome";
 import { SITE } from "@/config/site";
@@ -23,12 +27,27 @@ const LABEL = "mb-1.5 block text-[11px] font-medium uppercase tracking-[0.16em] 
 const PRIMARY =
   "flex h-12 w-full items-center justify-center rounded-full bg-accent text-[16px] font-medium text-[#141414] transition-opacity hover:opacity-90 disabled:opacity-60";
 
+/** A path on this site to go back to, from ?next= (never another site). */
+function nextPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return /^\/(?!\/)[^\s\\]*$/.test(next) ? next : null;
+}
+
 export default function AccountClient() {
   const auth = useAuth();
+  const router = useRouter();
   useEffect(() => {
     auth.init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Signed in (now, or already) and sent here from somewhere: go back there.
+  useEffect(() => {
+    if (!auth.ready || !auth.user || auth.recovery) return;
+    const next = nextPath();
+    if (next) router.replace(next);
+  }, [auth.ready, auth.user, auth.recovery, router]);
 
   let body: ReactNode;
   if (!auth.ready) body = <p className="text-muted">One moment…</p>;

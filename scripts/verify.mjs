@@ -1046,6 +1046,8 @@ async function apiChecks() {
   record(viewport, "/api/subscriptions/preview", "a chapter email renders (picture, link, a way to stop)", preview.status === 200 && /Read the chapter/.test(preview.text) && /Stop these emails/.test(preview.text), String(preview.status));
   const notify = await fetch(`${BASE}/api/subscriptions/notify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chapterId: "00000000-0000-0000-0000-000000000000" }) });
   record(viewport, "/api/subscriptions/notify", "refuses without email set up (503) or without a signed-in owner (401)", notify.status === (mailOn ? 401 : 503), String(notify.status));
+  const bounce = await fetch(`${BASE}/api/webhooks/resend`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "email.bounced", data: { to: ["someone@example.com"] } }) });
+  record(viewport, "/api/webhooks/resend", "an unsigned bounce changes nothing (503 until set up, then 401)", bounce.status === 503 || bounce.status === 401, String(bounce.status));
   const stop = await fetch(`${BASE}/api/subscriptions/unsubscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "nope" }) });
   record(viewport, "/api/subscriptions/unsubscribe", "a malformed token is refused", stop.status === 400, String(stop.status));
   const manifest = await get("/manifest.webmanifest");

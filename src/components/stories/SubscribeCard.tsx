@@ -6,6 +6,7 @@
  * keeps it in this browser and says so.
  */
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SITE } from "@/config/site";
 import { useAuth } from "@/lib/auth/store";
@@ -14,6 +15,7 @@ import { mySubscription, subscribe, unsubscribe, type SubStatus } from "@/lib/su
 
 export default function SubscribeCard({ petId, petName, className = "" }: { petId: string; petName: string; className?: string }) {
   const auth = useAuth();
+  const pathname = usePathname();
   const [status, setStatus] = useState<SubStatus | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export default function SubscribeCard({ petId, petName, className = "" }: { petI
           </button>
         ) : (
           <Link
-            href={SITE.nav.account.href}
+            href={`${SITE.nav.account.href}?next=${encodeURIComponent(pathname || "/stories")}`}
             className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-[15px] font-medium text-[#141414] transition-opacity hover:opacity-90"
             data-subscribe-signin
           >

@@ -250,8 +250,10 @@ live, sending answers 503 until `RESEND_API_KEY` + `EMAIL_FROM` are set.)*
       (mail scanners open links)
 - [x] Send log (`story_emails`), rate limits (30 invitations a day a pet, API
       limits per visitor)
-- [ ] Bounce handling: Resend already suppresses hard bounces itself; marking
-      them `bounced` here needs its webhook (and a server secret key on Vercel)
+- [ ] Bounce handling: built (`/api/webhooks/resend`, Svix signature checked,
+      hard bounce → `bounced`, complaint → `unsubscribed`); switch on with
+      `RESEND_WEBHOOK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` on Vercel (Resend
+      already suppresses hard bounces itself in the meantime)
 - [ ] First real send once the domain and Resend are set up (then invite
       yourself from /stories and email a chapter)
 
