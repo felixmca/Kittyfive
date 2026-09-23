@@ -71,6 +71,8 @@ localhost. The link you pasted contained a live sign-in token. Pressing
      on your head, turning with it, the brim just above your eyebrows;
    - **the hoodie and long-sleeve are fitted by default**: they start at your
      collar, as wide as you, and a raised arm takes its sleeve with it;
+   - **the new Kitty walks beside you there too** (the store's model, in
+     place of the blocky cat);
    - `?cap3d=0` and `?fit=0` bring the old flat versions back, if you
      want to compare.
 
@@ -218,6 +220,9 @@ tracking (see "Things this session learned").
   fewer pixels on a slow phone.
 - **The flat cap** (fallback): 2.25 × the head's width, and never smaller
   than 1.7 × the eye-to-ear distance, so a turned head keeps its size.
+- **Kitty beside you** (`KittyCompanion.tsx`) is the store's model now,
+  walking and standing with her own clips; the procedural cat stands in
+  while she loads.
 - Still to do with Felix's footage (`assets-raw/tryon/README.md`): tune
   all of this on video, not stills; the store's hoodie and long-sleeve
   models could replace the drawn garments in the fitted warp.

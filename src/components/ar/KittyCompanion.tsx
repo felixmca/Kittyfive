@@ -1,9 +1,10 @@
 "use client";
 /**
  * KittyCompanion — a small transparent R3F canvas over the bottom 35% of the
- * try-on. Inside: a procedural black-and-white cat (no textures, no GLB) that
- * walks slowly left and right along an assumed floor line, turns at the
- * edges, and now and then sits down and looks up at the camera. While
+ * try-on. Inside: Kitty (the store's model, /models/kitty.glb, with her walk
+ * and idle; a procedural black-and-white cat stands in while it loads or if
+ * it cannot) who walks slowly left and right along an assumed floor line,
+ * turns at the edges, and now and then stops and looks at the camera. While
  * someone is being tracked she goes and sits beside them instead (on the
  * side with more room, clear of their shoulders), turned a little towards
  * them, and moves over when they do.
@@ -17,6 +18,8 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import ArErrorBoundary from "./ArErrorBoundary";
 import type { PersonSpot } from "./landmarks";
 
@@ -24,6 +27,58 @@ const BLACK = "#15151a";
 const WHITE = "#f4f1ea";
 const GREEN = "#8fd37a";
 const PINK = "#d9908f";
+
+const KITTY_GLB = "/models/kitty.glb";
+/** The model's height in metres (feet to ear tips), to bring it to UNIT_HEIGHT. */
+const GLB_HEIGHT = 0.36;
+
+interface KittyModel {
+  scene: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  walk: THREE.AnimationAction | null;
+  idle: THREE.AnimationAction | null;
+}
+
+/** The store's Kitty, loaded without suspending (null until she arrives, or if she cannot). */
+function useKittyModel(): KittyModel | null {
+  const [model, setModel] = useState<KittyModel | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let loaded: KittyModel | null = null;
+    const draco = new DRACOLoader();
+    draco.setDecoderPath("/draco/");
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(draco);
+    loader.load(
+      KITTY_GLB,
+      (gltf) => {
+        if (cancelled) return;
+        const mixer = new THREE.AnimationMixer(gltf.scene);
+        const clip = (re: RegExp) => gltf.animations.find((a) => re.test(a.name)) ?? null;
+        const walkClip = clip(/walk/i);
+        const idleClip = clip(/idle|sit/i);
+        loaded = { scene: gltf.scene, mixer, walk: walkClip ? mixer.clipAction(walkClip) : null, idle: idleClip ? mixer.clipAction(idleClip) : null };
+        setModel(loaded);
+      },
+      undefined,
+      () => {
+        /* the procedural cat stays */
+      },
+    );
+    return () => {
+      cancelled = true;
+      draco.dispose();
+      loaded?.mixer.stopAllAction();
+      loaded?.scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.geometry.dispose();
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => m.dispose());
+      });
+    };
+  }, []);
+  return model;
+}
 
 /** Target on-screen height for the cat, CSS px. */
 const CAT_PX = 120;
@@ -98,6 +153,8 @@ function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<P
   const legs = useRef<Array<THREE.Group | null>>([null, null, null, null]);
   const tail = useRef<Array<THREE.Mesh | null>>([]);
   const eyes = useRef<Array<THREE.Mesh | null>>([null, null]);
+  const model = useKittyModel();
+  const playing = useRef<"walk" | "idle" | null>(null);
 
   const st = useRef<CatState>({
     mode: reduced ? "sit" : "walk",
@@ -280,6 +337,20 @@ function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<P
     }
 
     for (const eye of eyes.current) if (eye) eye.scale.y = blinking ? 0.12 : 1;
+
+    // The model, once she is here: walking or standing, crossfaded.
+    if (model) {
+      b.visible = false;
+      const want = reduced ? null : s.mode === "walk" ? "walk" : "idle";
+      if (want !== playing.current) {
+        const next = want === "walk" ? model.walk : want === "idle" ? model.idle : null;
+        const prev = playing.current === "walk" ? model.walk : playing.current === "idle" ? model.idle : null;
+        prev?.fadeOut(0.3);
+        next?.reset().fadeIn(0.3).play();
+        playing.current = want;
+      }
+      model.mixer.update(dt);
+    }
   });
 
   return (
@@ -294,6 +365,12 @@ function Cat({ reduced, personRef }: { reduced: boolean; personRef?: RefObject<P
         <circleGeometry args={[1, 28]} />
       </mesh>
 
+      {model ? (
+        // She faces +z; the procedural cat (and this group's heading) faces +x.
+        <group rotation={[0, Math.PI / 2, 0]} scale={UNIT_HEIGHT / GLB_HEIGHT}>
+          <primitive object={model.scene} />
+        </group>
+      ) : null}
       <group ref={body} position={[PIVOT.x, PIVOT.y, 0]}>
         {/* torso */}
         <mesh position={[0.22, 0.14, 0]} scale={[1.4, 0.95, 0.95]} material={mats.black}>
