@@ -117,8 +117,19 @@ export function fetchManifest(dir: string, signal?: AbortSignal): Promise<FrameM
   if (cached) return cached;
   const p = (async () => {
     // no-cache: revalidated each visit (cheap: a 304), so a re-cut clip's new
-    // frame count and version arrive at once.
-    const res = await fetch(url, { signal, cache: "no-cache" });
+    // frame count and version arrive at once. A manifest that has not come in
+    // 10 s counts as a network failure (not cached: the next visit retries).
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    const onAbort = () => ctrl.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    let res: Response;
+    try {
+      res = await fetch(url, { signal: ctrl.signal, cache: "no-cache" });
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    }
     if (!res.ok) return null;
     try {
       const json = (await res.json()) as Partial<FrameManifest>;
