@@ -77,19 +77,13 @@ export async function POST(req: Request): Promise<Response> {
   };
   const results = await deliverBatch(recipients.map((r) => chapterEmail({ to: r.email, token: r.token, chapter: forEmail })));
 
-  // The send log, a few at a time.
-  for (let i = 0; i < recipients.length; i += 20) {
-    await Promise.all(
-      recipients.slice(i, i + 20).map((r, k) =>
-        as.sb.rpc("log_story_email", {
-          p_subscription: r.subscription_id,
-          p_chapter: chapterId,
-          p_kind: "chapter",
-          p_status: results[i + k]?.sent ? "sent" : "failed",
-          p_provider_id: results[i + k]?.id ?? null,
-        }),
-      ),
-    );
+  // The send log, in one call.
+  if (recipients.length) {
+    const { error: logError } = await as.sb.rpc("log_story_emails", {
+      p_chapter: chapterId,
+      p_rows: recipients.map((r, k) => ({ s: r.subscription_id, st: results[k]?.sent ? "sent" : "failed", id: results[k]?.id ?? null })),
+    });
+    if (logError) console.warn("[subscriptions] send log failed:", logError.message);
   }
   const sent = results.filter((r) => r.sent).length;
   if (recipients.length > 0 && sent === 0) {

@@ -190,6 +190,11 @@ begin
   perform public.log_story_email(
     (select s.id from public.story_subscriptions s where s.email = 'rls-stranger@example.com'), ch, 'chapter', 'sent', 'rls-test');
   if public.chapter_notify_failed(ch) then raise exception 'a chapter that was sent could be sent again'; end if;
+  -- The batch log keeps only this pet's subscriptions.
+  select public.log_story_emails(ch, jsonb_build_array(
+    jsonb_build_object('s', (select s.id from public.story_subscriptions s where s.email = 'rls-stranger@example.com'), 'st', 'sent', 'id', 'rls-batch'),
+    jsonb_build_object('s', gen_random_uuid(), 'st', 'sent', 'id', 'not-ours'))) into n;
+  if n <> 1 then raise exception 'the batch log kept % rows (expected 1)', n; end if;
   select count(*) into n from public.story_emails e where e.chapter_id = ch;
   if n < 1 then raise exception 'the send log is not readable by the admin'; end if;
 end $$;
