@@ -30,6 +30,10 @@ in [`docs/screenshots/day-23/`](screenshots/day-23/).
 5. **The fitted hoodie:** open `https://kittyfive.vercel.app/try-on?fit=1`,
    stand back so your arms are in the picture, and pick the hoodie or the
    long-sleeve. The sleeves should follow your arms (§12).
+6. **New chapters by email** (§13): at the bottom of `/stories` there is a
+   card to subscribe, and signed in you have a panel for invitations and
+   "Email it". It is all built and tested, but nothing sends until the site
+   has a domain (see below).
 
 If the landing still misbehaves, you don't need to describe it: each visit
 sends a small anonymous report (browser, screen, how far the story got, any
@@ -43,6 +47,10 @@ error), and the next session can read yours (§2 below).
 - Chapters 3 and 4 clips and the MISSING flyer ([Handover 01](HANDOVER-01-STORY-ASSETS.md)).
 - **New:** photos for the store's 3D house, Kitty's markings for the 3D cat,
   and a turntable video: the shot list is [Handover 04](HANDOVER-04-STORE-PHOTOS.md).
+- **New, when you are ready for email:** a domain for the site. With it,
+  verify it in Resend and put `RESEND_API_KEY` and `EMAIL_FROM` on Vercel;
+  story emails (and order emails) then switch on by themselves. The same
+  domain lets Supabase send sign-up emails through Resend (Roadmap 5).
 
 **Choices I made (say if you want them different):**
 - The floating camera button is gone from the landing, the store, checkout
@@ -58,8 +66,10 @@ error), and the next session can read yours (§2 below).
 **Not done, and why:** the Blender house and the real 3D Kitty need your
 photos (and the cat model needs downloading, which I did not do without
 asking); the fitted hoodie and the 3D cap need a real person on camera to
-calibrate against (both are built, behind switches); Phases 5–6 need a
-domain, Stripe and Printful accounts.
+calibrate against (both are built, behind switches); story emails are built
+but need a domain to send from; Phase 6 needs Stripe and Printful accounts.
+Phase 7 (other people's pets) waits on your licence choice; its self-hosting
+guide is written ([SELF-HOSTING.md](SELF-HOSTING.md)).
 
 ## Plan for the day
 
