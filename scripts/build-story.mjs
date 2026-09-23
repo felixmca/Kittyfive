@@ -13,6 +13,7 @@
 //
 //   public/story/<chapter>/0001.webp … + manifest.json   frames, if there is a clip
 //   public/story/<chapter>/still.webp                    the start frame (poster)
+//   public/story/<chapter>/still.jpg                     the same, for link previews
 //   public/story/<chapter>/extras/01.webp … + media.json the extras
 //   public/story/index.json                              which chapters have frames
 //   public/story/flyer.webp, public/story/cutouts/kitty-walk.png (or walk/…)
@@ -189,8 +190,11 @@ async function buildChapter(bin, id) {
 
   if (start) {
     await S(await readable(start)).rotate().resize({ width: WIDTH, withoutEnlargement: true }).webp({ quality: 80 }).toFile(join(outDir, "still.webp"));
+    // A JPEG twin for link previews: WhatsApp and others do not all show WebP.
+    await S(join(outDir, "still.webp")).jpeg({ quality: 82, mozjpeg: true }).toFile(join(outDir, "still.jpg"));
   } else {
     rmSync(join(outDir, "still.webp"), { force: true });
+    rmSync(join(outDir, "still.jpg"), { force: true });
   }
 
   const extrasOut = join(outDir, "extras");
@@ -209,6 +213,10 @@ async function buildChapter(bin, id) {
         .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 78 })
         .toFile(join(extrasOut, name));
+      // End frames become chapter tiles, so they get a JPEG twin for link previews too.
+      if (slug === "end-frame") {
+        await S(join(extrasOut, name)).jpeg({ quality: 82, mozjpeg: true }).toFile(join(extrasOut, `${slug}.jpg`));
+      }
       extrasList.push({ name: slug, src: `/story/${id}/extras/${name}`, width: info.width, height: info.height });
     }
   }

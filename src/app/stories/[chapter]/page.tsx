@@ -20,7 +20,11 @@ export async function generateMetadata({ params, searchParams }: { params: Param
   if (!data) return { title: "Kitty Stories" };
   const entry = data.reading[data.index];
   const c = data.chapters[entry.chapterId];
-  const image = mediaUrl(c?.tileImageA ?? null);
+  // Link previews: the landing's stills and end frames have a JPEG twin (npm
+  // run story), since WhatsApp and some others do not show WebP.
+  const tile = c?.tileImageA ?? null;
+  const twin = tile && /^\/story\/[^/]+\/(still|extras\/end-frame)\.webp$/.test(tile);
+  const image = mediaUrl(twin ? tile.replace(/\.webp$/, ".jpg") : tile);
   const description = c?.subtitle ?? c?.description ?? `Volume ${entry.volumeNumber}: ${entry.volumeTitle}`;
   return {
     title: entry.title,
@@ -28,7 +32,8 @@ export async function generateMetadata({ params, searchParams }: { params: Param
     openGraph: {
       title: `${entry.title} · ${SITE.name} Stories`,
       description,
-      images: image ? [{ url: image }] : undefined,
+      // No tile yet: the site's own card (Kitty's photo and name) rather than nothing.
+      images: [{ url: image ?? "/opengraph-image.jpg" }],
     },
   };
 }
