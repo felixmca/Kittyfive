@@ -11,7 +11,7 @@ is at the bottom of "Progress".
 **Everything below is live at https://kittyfive.vercel.app.** Screenshots are
 in [`docs/screenshots/day-23/`](screenshots/day-23/).
 
-**Please try these on your iPhone (five minutes):**
+**Please try these on your iPhone (ten minutes):**
 1. **The landing.** The story should now start under the camera within a
    couple of seconds and play all the way through. It was failing on iPhone
    because it kept about 340 MB of video frames in memory, more than Safari
@@ -29,7 +29,8 @@ in [`docs/screenshots/day-23/`](screenshots/day-23/).
    unchanged.
 5. **The fitted hoodie:** open `https://kittyfive.vercel.app/try-on?fit=1`,
    stand back so your arms are in the picture, and pick the hoodie or the
-   long-sleeve. The sleeves should follow your arms (§12).
+   long-sleeve. The sleeves should follow your arms (§12). Stand further
+   back, feet in the picture, and Kitty sits on the floor next to you.
 6. **New chapters by email** (§13): at the bottom of `/stories` there is a
    card to subscribe, and signed in you have a panel for invitations and
    "Email it". It is all built and tested, but nothing sends until the site
@@ -62,6 +63,10 @@ error), and the next session can read yours (§2 below).
   instead of leaving Kitty silent.
 - Link previews (WhatsApp, iMessage) show her close-up from the end of
   chapter 1 with her name; chapters show their own picture.
+- To get new chapters by email a reader signs in (their confirmed account
+  email is the opt-in), or you invite them. There is no "just type your
+  email" box, because an open box collects fake and malicious sign-ups; say
+  if you want one (it would need its own confirm email).
 
 **Not done, and why:** the Blender house and the real 3D Kitty need your
 photos (and the cat model needs downloading, which I did not do without
