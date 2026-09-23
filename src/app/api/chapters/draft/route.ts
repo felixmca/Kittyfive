@@ -51,6 +51,8 @@ interface Body {
   text?: unknown;
   volumeId?: unknown;
   demo?: unknown;
+  /** Demo mode sends no photos (they are data URLs in the browser), only how many there are. */
+  photoCount?: unknown;
 }
 
 let client: Anthropic | null = null;
@@ -71,7 +73,9 @@ export async function POST(req: Request): Promise<Response> {
 
   // Demo mode, or a deployment with nothing configured: no account, no Claude.
   if (body.demo === true || !supabaseConfigured) {
-    return json({ draft: cannedDraft(text, photos.length, "Kitty"), source: "demo" });
+    const count = typeof body.photoCount === "number" && Number.isFinite(body.photoCount) ? body.photoCount : 0;
+    const n = Math.min(MAX_PHOTOS, Math.max(photos.length, Math.floor(count)));
+    return json({ draft: cannedDraft(text, n, "Kitty"), source: "demo" });
   }
 
   const token = bearerToken(req);

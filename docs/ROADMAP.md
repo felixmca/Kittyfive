@@ -1,9 +1,10 @@
 # Kittyfive roadmap
 
-*Last updated 23 Sep 2026 (overnight). This is the plan every session starts
+*Last updated 23 Sep 2026 (day session). This is the plan every session starts
 from: find the first unchecked box in the current phase, do it, tick it,
-deploy. The overnight session's morning note is at the top of
-[Handover 02](HANDOVER-02-OVERNIGHT.md).*
+deploy. The day session's log and its note for Felix are in
+[Handover 03](HANDOVER-03-DAY.md); what to photograph for the store is
+[Handover 04](HANDOVER-04-STORE-PHOTOS.md).*
 
 ## What we are building
 
@@ -34,7 +35,7 @@ The three pillars, in Kitty's words:
 | **0 · Foundation** | Story engine, store, try-on, commerce adapters, verify harness, research | — | ✅ done 21–22 Sep |
 | **1 · The landing story** | Four AI chapters chained frame to frame, played by swipes | Clips 3 and 4 on artta ([Handover 01](HANDOVER-01-STORY-ASSETS.md)) | 🟡 swipe landing live with chapters 1–2; 3–4 play designed stand-ins until their clips land |
 | **2 · The Stories page** | Platform foundation (GitHub, Supabase, auth, deploy) · volumes and chapter tiles · tile editor · drag with ripple · continuous chapter reader · chapter builder | Supabase URL settings; sign up once | 🟢 built and deployed; waiting on Felix's sign-up for the live studio test |
-| **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room and garden reference photos | ⬜ next |
+| **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room, garden and Kitty photos ([Handover 04](HANDOVER-04-STORE-PHOTOS.md)) | 🟡 chat on the real key + Kitty Tunables live; the house waits for the photos |
 | **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | — | ⬜ |
 | **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | ⬜ |
 | **6 · Kitty's store takes money** | Printful UK, Stripe live, order emails | Stripe, Printful, Vercel Pro, Supabase Pro | ⬜ |
@@ -78,6 +79,9 @@ scrubs. Chapter 1 plays under the camera hero as the page loads, behind a
 - [x] Swipe story engine: stops, swipe/keys/wheel, hold to pause, drag to scrub, reduced motion, skip (task C)
 - [x] Chapter 1 → 2 WhatsApp flight; chapter 2 kittens; captions that assemble; loading splash (tasks D–G)
 - [x] Verify at 390×844 and 1280×800 (headless Playwright + `npm run verify`), deploy (tasks H–I)
+- [x] iPhone fix (23 Sep): only a small window of frames is decoded (≈85 MB instead of ≈340 MB, which iOS Safari would not hold), a stuck load can always be skipped, native scrolling cannot escape the story on iOS; `npm run verify` now also runs WebKit as an iPhone 17 Pro (portrait) and a 375×667 phone
+- [x] Kitty's face as a home button on every page; the menu starts with Kitty; "Try it on" links replace the floating camera where it covered buttons
+- [x] Anonymous story reports (`story_reports`): how the story went on real phones, so iPhone problems show up without a debugging session
 - [x] Chapters 3–4 stand-ins (night + rain + the drawn MISSING flyer; her at home in warm river light), so the story is complete before their clips
 - [ ] When clips 3–4 land: `npm run story` picks them up by itself; then look at the joins and tune timings (`src/components/landing/SwipeStory/timeline.ts`)
 - [ ] When `ui/flyer/` has the real flyer: it replaces the drawn one automatically
@@ -144,10 +148,11 @@ and four swipes carry it through the whole story with no seams.
       and clip upload have only been exercised in demo mode)
 
 ### 2E · Verify and ship
-- [ ] Playwright journeys: visitor reads across a volume boundary; owner edits
+- [x] Playwright journeys: visitor reads across a volume boundary; owner edits
       a tile, drags a chapter, builds a chapter from fixtures (demo mode, never
-      production data)
-- [ ] Deploy; smoke-test on a phone
+      production data) (23 Sep, `npm run verify`)
+- [ ] Deploy; smoke-test on a phone (deployed; tested in phone emulation only,
+      Chrome and WebKit, until Felix tries it on his iPhone)
 
 **Done when** Felix can make a new chapter on his phone from photos and a few
 sentences, drag it into place, and a visitor can read every chapter of every
@@ -161,11 +166,13 @@ Not a photogrammetry scan: a **non-realistic, animated** 3D version of the
 living room and garden (think soft low-poly with toon shading), which is cheaper
 to render on phones and easier to make charming.
 
-**Felix**
+**Felix** (the shot list: [Handover 04](HANDOVER-04-STORE-PHOTOS.md))
 - [ ] Reference photos into `assets-raw/room/`: each corner of the living room,
       the window and river view, the sofa, the kitchen counter, the garden from
-      the door and from the far end, anything Kitty loves (brief to follow)
+      the door and from the far end, anything Kitty loves
 - [ ] Rough room and garden measurements
+- [ ] Kitty's markings (`assets-raw/kitty-identity/`) and a turntable video
+      (`assets-raw/turntable/`)
 
 **Code**
 - [ ] Room + garden modelled in Blender (MCP) from the photos: stylised palette,
@@ -175,10 +182,11 @@ to render on phones and easier to make charming.
 - [ ] The tour: Kitty walks sofa → window → counter → garden; camera follows;
       river and plants animate; day/evening light
 - [ ] Products at spots in the house; product panel and Buy (demo checkout)
-- [ ] Chat with Kitty on the real API key; **Kitty Tunables** on `/admin`
+- [x] Chat with Kitty on the real API key; **Kitty Tunables** on `/admin`
       (warmth, dryness, snack obsession, merch pushiness, story references,
       length, opening line, extra notes, model effort) compiled into her system
-      prompt
+      prompt (23 Sep: `pet_personas`, `src/lib/persona.ts`; server-side
+      refusal fallbacks on)
 - [ ] Performance: 60 fps on an iPhone 12, first render < 3 s on 4G
 
 ## Phase 4 · A more realistic try-on

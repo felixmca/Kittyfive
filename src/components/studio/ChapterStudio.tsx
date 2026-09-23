@@ -266,6 +266,7 @@ export default function ChapterStudio({ mode, chapterSlug, volumeSlug }: Props) 
         body: JSON.stringify({
           petId: stories.pet.id,
           photos: backend.mode === "demo" ? [] : photos.map((p) => mediaUrl(p)).filter(Boolean),
+          photoCount: photos.length,
           text,
           volumeId: tile.volumeId,
           demo: backend.mode === "demo",

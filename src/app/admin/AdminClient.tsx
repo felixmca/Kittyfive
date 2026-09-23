@@ -4,12 +4,13 @@
  * decides who that is (public.admins + is_admin(), which also requires a
  * confirmed email); this page only reflects it. Non-admins see a polite no.
  *
- * Today: what is connected, Kitty's book at a glance, and the setup steps
- * that only the dashboard owner can do. Kitty Tunables (her chat
- * personality) arrive with the store in Phase 3.
+ * Kitty Tunables (how she talks in the store's chat), what is connected,
+ * Kitty's book at a glance, and the setup steps that only the dashboard
+ * owner can do.
  */
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
+import TunablesEditor from "@/components/admin/TunablesEditor";
 import Chrome from "@/components/chrome/Chrome";
 import { SITE } from "@/config/site";
 import { accessToken, useAuth } from "@/lib/auth/store";
@@ -36,6 +37,7 @@ export default function AdminClient() {
   const [status, setStatus] = useState<Status | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [book, setBook] = useState<BookCounts | null>(null);
+  const [pet, setPet] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     auth.init();
@@ -49,6 +51,7 @@ export default function AdminClient() {
       try {
         const stories = await storiesBackend().loadStories(SITE.petSlug);
         if (stories && !cancelled) {
+          setPet({ id: stories.pet.id, name: stories.pet.name });
           const all = stories.volumes.flatMap((v) => v.chapters);
           setBook({ volumes: stories.volumes.length, chapters: all.length, drafts: all.filter((c) => c.status === "draft").length });
         }
@@ -90,6 +93,9 @@ export default function AdminClient() {
   else
     body = (
       <div className="grid gap-4 sm:grid-cols-2" data-admin-dashboard>
+        <Card title={`${pet?.name ?? SITE.name} Tunables`} wide>
+          <TunablesEditor petId={pet?.id ?? null} petSlug={SITE.petSlug} petName={pet?.name ?? SITE.name} />
+        </Card>
         <Card title={`${SITE.name}'s book`}>
           {book ? (
             <p className="text-[15px] text-fg/90">
@@ -104,12 +110,6 @@ export default function AdminClient() {
           </Link>
         </Card>
 
-        <Card title="Kitty Tunables">
-          <p className="text-[14px] leading-relaxed text-muted">
-            Sliders for Kitty&apos;s chat personality (how dry, how warm, how often she mentions snacks or the merch, how
-            long she talks) arrive with the store in Phase 3. Her voice lives in <code className="text-fg/80">src/config/kitty.ts</code> until then.
-          </p>
-        </Card>
 
         <Card title="Connected services">
           {auth.mode === "demo" ? (
@@ -156,9 +156,9 @@ export default function AdminClient() {
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function Card({ title, wide = false, children }: { title: string; wide?: boolean; children: ReactNode }) {
   return (
-    <section className="rounded-[22px] border border-white/10 bg-white/[0.03] p-5">
+    <section className={`rounded-[22px] border border-white/10 bg-white/[0.03] p-5 ${wide ? "sm:col-span-2" : ""}`}>
       <h2 className="mb-3 text-[11px] font-medium uppercase tracking-[0.16em] text-muted">{title}</h2>
       {children}
     </section>

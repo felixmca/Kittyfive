@@ -61,3 +61,59 @@ swipes are real touch events that start on the hero, and the check asserts no
 more than 40 frames are ever decoded on a phone. 288/288 passed on the
 production build. A headless browser is not an iPhone (no iOS memory limits),
 so **please try it on your phone**.
+
+### 2 · Story reports (deployed, commit `e4faa48`)
+
+The landing now sends home one small, anonymous summary per visit: which
+browser and screen, whether the story started and how fast, how far it got,
+how many frames were decoded at most, and the first few errors. There is also
+a note for when the previous visit in that tab ended in a crash (iOS reloads a
+page it kills for memory). No IP address, cookies or identifiers are kept. It
+goes into a Supabase table capped at 2000 rows a day and 30 days, and only
+admins can read it. So when you open the site on your iPhone, the next session
+can see exactly what happened:
+
+```bash
+node scripts/db.mjs -e "select created_at, kind, report->>'screen' as screen, report->>'started' as started, report->>'furthest' as furthest, report->>'peakDecoded' as peak, report->'errors' as errors, left(report->>'ua', 60) as ua from story_reports order by created_at desc limit 20"
+```
+
+It is off on localhost and in the test harness, and `NEXT_PUBLIC_STORY_REPORTS=off`
+turns it off entirely.
+
+### 3 · Phase 2E: the Stories pages are tested end to end
+
+`npm run verify` now also runs these journeys in demo mode, where every edit
+stays in the test browser:
+- a reader scrolls from the end of volume 1 into volume 2, and the address
+  bar and the "Vol 2 · The cupboard" chip follow;
+- an owner builds a chapter from two photos and a few sentences, publishes it,
+  drags it in front of "A cold night", renames its tile, and reloads to prove
+  all of it stuck.
+
+This caught one gap: the demo draft made a single scene however many photos
+you added. It now makes one per photo, as the real one does. The full run was
+318/318.
+
+### 4 · Kitty Tunables and chat on the real key (Phase 3)
+
+`/admin` now has **Kitty Tunables**: five sliders (warmth, dryness, snack
+obsession, merch pushiness, story references), reply length, effort, her
+opening line and free notes. Under each slider is the exact sentence it puts
+into her instructions, and "Show her full instructions" shows the whole prompt
+she is given. Saving stores them in Supabase (`pet_personas`: editors write,
+anyone can read, so no private details in the notes). The chat picks a change
+up within a minute, and the store opens with her tuned opening line.
+
+The chat itself still runs on Claude Opus 5 and now has Anthropic's
+server-side **refusal fallback** switched on. If Opus declines a turn, the API
+reruns it on a fallback model in the same call, and a turn that still ends
+with nothing to say gets an in-character line instead of a blank bubble.
+Tested with real calls.
+
+### 5 · Photos for the store
+
+The house is modelled from your own rooms, so Phase 3's next steps need
+pictures. [Handover 04](HANDOVER-04-STORE-PHOTOS.md) is the shot list: the
+living room, the garden, rough measurements, Kitty's markings (so the 3D cat
+is really her) and a turntable video (the "spin Kitty" circle at the end of
+the landing is still a drawing). The folders have READMEs.

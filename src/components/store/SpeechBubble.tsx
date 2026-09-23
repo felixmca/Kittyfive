@@ -1,13 +1,16 @@
 "use client";
 /**
  * Kitty's speech bubble, anchored above her head with drei's Html so it follows
- * her around the room. Shows KITTY.opening when the store first opens, then
- * each product's pitch once she has walked over to it. Hidden while walking.
+ * her around the room. Shows her opening line (Kitty Tunables, /admin) when
+ * the store first opens, then each product's pitch once she has walked over
+ * to it. Hidden while walking.
  */
 import { useEffect, useState } from "react";
 import { Html } from "@react-three/drei";
 import { KITTY } from "@/config/kitty";
 import { PRODUCTS } from "@/config/products";
+import { SITE } from "@/config/site";
+import { useOpeningLine } from "@/lib/personaClient";
 import { useStoreState } from "./storeState";
 import { wrapIndex } from "./spots";
 
@@ -17,6 +20,7 @@ export default function SpeechBubble() {
   const arrivedIndex = useStoreState((s) => s.arrivedIndex);
   const arrivals = useStoreState((s) => s.arrivals);
   const [openingDone, setOpeningDone] = useState(false);
+  const opening = useOpeningLine(SITE.petSlug);
 
   // After the opening line has had its moment, move on to the pitch even if
   // the visitor has not tapped anything yet.
@@ -30,8 +34,8 @@ export default function SpeechBubble() {
     arrivedIndex === null
       ? null
       : arrivals === 0 && !openingDone
-        ? KITTY.opening
-        : (PRODUCTS[wrapIndex(arrivedIndex, PRODUCTS.length)]?.pitch ?? KITTY.opening);
+        ? opening
+        : (PRODUCTS[wrapIndex(arrivedIndex, PRODUCTS.length)]?.pitch ?? opening);
 
   // Keep the last line in the DOM so it can fade out instead of vanishing.
   const [shown, setShown] = useState<string>(KITTY.opening);

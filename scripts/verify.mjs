@@ -4,6 +4,7 @@
 //   npm run verify                          # every viewport, every journey
 //   npm run verify -- --base=http://localhost:3201 --only=390
 //   npm run verify -- --only=iphone         # WebKit (Safari's engine), iPhone portrait
+//   npm run verify -- --journeys=stories,pages   # only some journeys
 //
 // One harness, extended per feature. It exists to catch what tsc, eslint and
 // `next build` cannot: a canvas that mounted and painted nothing, a control
@@ -577,6 +578,171 @@ async function journeyTryOn(browser, viewport) {
   });
 }
 
+// ─── the book (Phase 2E) ─────────────────────────────────────────────────────
+//
+// Owner journeys run in demo mode with a pretend account: every edit lives in
+// this test browser's localStorage and nothing reaches the real project.
+
+const DEMO_OWNER = { email: "owner@example.com", displayName: "Owner" };
+const FIXTURES = [join(root, "public/story/01-a-cold-night/still.webp"), join(root, "public/story/02-five-by-dawn/extras/kittens4.webp")];
+
+/** Titles of the chapter tiles in volume `slug`, in order. */
+const tileTitles = (page, slug) =>
+  page.$$eval(`[data-volume="${slug}"] [data-chapter-tile]`, (tiles) =>
+    tiles.map((t) => (t.querySelector("h3, h2")?.textContent ?? t.textContent ?? "").replace(/\s+/g, " ").trim()),
+  );
+
+async function journeyStoriesOwner(browser, viewport) {
+  const route = "/stories (owner, demo)";
+  await withPage(browser, viewport, async (page, errors, bad) => {
+    await page.addInitScript((owner) => {
+      if (!sessionStorage.getItem("verify-seeded")) {
+        localStorage.removeItem("kittyfive-demo-stories-v1");
+        localStorage.setItem("kittyfive-demo-auth", JSON.stringify(owner));
+        sessionStorage.setItem("verify-seeded", "1");
+      }
+    }, DEMO_OWNER);
+
+    // 1 · Build a chapter from two photos and a few sentences (canned draft in demo).
+    await goto(page, "/stories/new?volume=the-back-door&demo=1");
+    const compose = await page.waitForSelector("[data-studio-compose]", { timeout: 20_000 }).catch(() => null);
+    record(viewport.name, route, "chapter builder opens for the owner", !!compose);
+    if (!compose) return;
+    await page.setInputFiles("[data-photo-tray] input[type=file], [data-studio-compose] input[type=file]", FIXTURES);
+    await page.waitForFunction(() => document.querySelectorAll("[data-photo-tray] img").length >= 2, null, { timeout: 20_000 }).catch(() => {});
+    const photos = await page.$$eval("[data-photo-tray] img", (imgs) => imgs.length);
+    record(viewport.name, route, "two photos added to the tray", photos >= 2, `${photos} in the tray`);
+    await page.fill("#studio-text", "She sat on the back step at dusk and would not come in until the kettle boiled. Then she did, and stayed on the rug.");
+    await page.click("[data-draft]");
+    const review = await page.waitForSelector("[data-studio-review]", { timeout: 20_000 }).catch(() => null);
+    const scenes = await page.$$("[data-studio-scene]");
+    record(viewport.name, route, "the draft arrives with scenes", !!review && scenes.length >= 2, `${scenes.length} scenes`);
+    await page.screenshot({ path: join(OUT, `owner-${viewport.name}-01-draft.png`) });
+    await page.click("[data-publish]");
+    await page.waitForURL(/\/stories\/[^/]+\/edit/, { timeout: 20_000 }).catch(() => {});
+    const builtSlug = /\/stories\/([^/]+)\/edit/.exec(new URL(page.url()).pathname)?.[1] ?? null;
+    record(viewport.name, route, "published: the studio moves to the chapter's own URL", !!builtSlug, new URL(page.url()).pathname);
+
+    // 2 · It is in its volume, after "A cold night".
+    await goto(page, "/stories?demo=1");
+    await page.waitForSelector('[data-volume="the-back-door"] [data-chapter-tile]', { timeout: 20_000 }).catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll('[data-volume="the-back-door"] [data-chapter-tile]').length >= 2, null, { timeout: 15_000 }).catch(() => {});
+    const before = await tileTitles(page, "the-back-door");
+    record(viewport.name, route, "the new chapter is in its volume", before.length === 2 && /A cold night/.test(before[0]), before.join(" | "));
+
+    // 3 · Drag it in front of "A cold night" (keyboard on the grip: Space, ←, Space).
+    await page.click("[data-edit-toggle]");
+    const grips = await page.$$('[data-volume="the-back-door"] [data-ripple-grip]');
+    record(viewport.name, route, "Edit shows drag handles", grips.length === 2, `${grips.length} handles`);
+    if (grips.length === 2) {
+      await grips[1].focus();
+      await page.keyboard.press("Space");
+      await page.waitForTimeout(250);
+      await page.keyboard.press("ArrowLeft");
+      await page.waitForTimeout(250);
+      await page.keyboard.press("Space");
+      await page.waitForTimeout(1200);
+    }
+    const moved = await tileTitles(page, "the-back-door");
+    record(viewport.name, route, "drag reorders the chapters", moved.length === 2 && moved[0] === before[1] && moved[1] === before[0], moved.join(" | "));
+    await page.screenshot({ path: join(OUT, `owner-${viewport.name}-02-dragged.png`) });
+
+    // 4 · Edit its tile: a new title, saved.
+    const tiles = await page.$$('[data-volume="the-back-door"] [data-chapter-tile]');
+    if (tiles[0]) await tiles[0].click();
+    const editor = await page.waitForSelector("[data-tile-editor]", { timeout: 10_000 }).catch(() => null);
+    record(viewport.name, route, "tapping a tile opens its editor", !!editor);
+    if (editor) {
+      await page.fill('[data-tile-editor] input[placeholder="And there she was"]', "The kettle and the rug");
+      await page.click("[data-tile-save]");
+      await page.waitForSelector("[data-tile-editor]", { state: "detached", timeout: 10_000 }).catch(() => {});
+    }
+
+    // 5 · Reload: order and title are still there.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => document.querySelectorAll('[data-volume="the-back-door"] [data-chapter-tile]').length >= 2, null, { timeout: 20_000 }).catch(() => {});
+    const after = await tileTitles(page, "the-back-door");
+    record(viewport.name, route, "after a reload: new order and new title kept", after.length === 2 && /The kettle and the rug/.test(after[0]) && /A cold night/.test(after[1]), after.join(" | "));
+    await page.screenshot({ path: join(OUT, `owner-${viewport.name}-03-reloaded.png`) });
+
+    record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+    record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+  });
+}
+
+/** A visitor scrolls from the end of volume 1 into volume 2 without tapping. */
+async function journeyReader(browser, viewport) {
+  const route = "/stories/a-cold-night → volume 2";
+  await withPage(browser, viewport, async (page, errors, bad) => {
+    await goto(page, "/stories/a-cold-night?demo=1");
+    const chip = () => page.$eval("[data-reader-position]", (el) => el.textContent?.trim() ?? "").catch(() => "");
+    record(viewport.name, route, "reader opens on volume 1", /Vol 1/i.test(await chip()), await chip());
+    let path = new URL(page.url()).pathname;
+    const deadline = Date.now() + 40_000;
+    while (Date.now() < deadline && path === "/stories/a-cold-night") {
+      await page.mouse.move(viewport.width / 2, viewport.height / 2);
+      if (viewport.engine === "webkit" && viewport.mobile) await page.keyboard.press("PageDown");
+      else await page.mouse.wheel(0, viewport.height * 0.8);
+      await page.waitForTimeout(250);
+      path = new URL(page.url()).pathname;
+    }
+    const now = await chip();
+    record(viewport.name, route, "scrolling on reaches the next volume's chapter", path === "/stories/five-by-dawn" && /Vol 2/i.test(now), `${path} · ${now}`);
+    await page.screenshot({ path: join(OUT, `reader-${viewport.name}-vol2.png`) });
+    record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+    record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+  });
+}
+
+/** Kitty Tunables on /admin (demo: saved in this browser), and the store picking them up. */
+async function journeyAdmin(browser, viewport) {
+  const route = "/admin (Tunables, demo)";
+  await withPage(browser, viewport, async (page, errors, bad) => {
+    await page.addInitScript((owner) => {
+      if (!sessionStorage.getItem("verify-seeded")) {
+        localStorage.removeItem("kittyfive-demo-persona-v1");
+        localStorage.setItem("kittyfive-demo-auth", JSON.stringify(owner));
+        sessionStorage.setItem("verify-seeded", "1");
+      }
+    }, DEMO_OWNER);
+    await goto(page, "/admin?demo=1");
+    const editor = await page.waitForSelector("[data-tunables]", { timeout: 20_000 }).catch(() => null);
+    record(viewport.name, route, "the Tunables editor shows for an admin", !!editor);
+    if (!editor) return;
+    const line = () => page.$eval('[data-tunable="snacks"] [data-tunable-line]', (el) => el.textContent ?? "");
+    const before = await line();
+    await page.$eval("#tun-snacks", (el) => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      set.call(el, "10");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const after = await line();
+    record(viewport.name, route, "a slider rewrites the line it puts in her prompt", after !== before && /snack/i.test(after), after.slice(0, 60));
+    await page.fill("#tun-opening", "Oh. You again.");
+    await page.click("[data-tunables-save]");
+    await page.waitForSelector("[data-tunables-status]", { timeout: 10_000 }).catch(() => {});
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector("[data-tunables]", { timeout: 20_000 }).catch(() => {});
+    const kept = await page.evaluate(() => ({
+      snacks: document.querySelector("#tun-snacks")?.value,
+      opening: document.querySelector("#tun-opening")?.value,
+    }));
+    record(viewport.name, route, "saved tunables survive a reload", kept.snacks === "10" && kept.opening === "Oh. You again.", JSON.stringify(kept));
+    await page.click("text=Show her full instructions");
+    const prompt = (await page.$eval("[data-tunables-prompt]", (el) => el.textContent ?? "").catch(() => "")) ?? "";
+    record(viewport.name, route, "her full instructions include the tuned voice", /You are Kitty/.test(prompt) && prompt.includes(after), `${prompt.length} chars`);
+    await page.screenshot({ path: join(OUT, `admin-${viewport.name}-tunables.png`) });
+    await goto(page, "/store?demo=1");
+    await page.waitForTimeout(1500);
+    await page.click('button:has-text("Talk to Kitty")');
+    await page.waitForTimeout(500);
+    const opening = (await page.$eval('section[aria-label="Chat with Kitty"] p', (el) => el.textContent ?? "").catch(() => "")) ?? "";
+    record(viewport.name, route, "the store's chat opens with the tuned line", opening.startsWith("Oh. You again."), opening.slice(0, 60));
+    record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+    record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
+  });
+}
+
 /** Every page wears Kitty's home button, and it takes you back to the story. */
 async function journeyPages(browser, viewport) {
   await withPage(browser, viewport, async (page, errors, bad) => {
@@ -645,8 +811,9 @@ async function main() {
   const JOURNEYS = {
     landing: [journeyLanding, journeyLandingReduced],
     store: [journeyStore],
-    stories: [journeyStories],
+    stories: [journeyStories, journeyReader, journeyStoriesOwner],
     tryon: [journeyTryOn],
+    admin: [journeyAdmin],
     pages: [journeyPages],
   };
   try {
@@ -659,8 +826,10 @@ async function main() {
         continue;
       }
       console.log(`\n── ${v.name} (${v.engine} ${v.device ?? ""} ${v.width}×${v.height}) ──`);
+      const picked = args.journeys ? String(args.journeys).split(",") : null;
       for (const [key, fns] of Object.entries(JOURNEYS)) {
         if (v.only && !v.only.includes(key)) continue;
+        if (picked && !picked.includes(key)) continue;
         for (const fn of fns) await fn(browser, v);
       }
     }

@@ -13,7 +13,7 @@ Everything a non-developer edits lives in `src/config/*`:
 | `src/config/story.ts` | the four landing chapters (`STORY`: titles, captions, entrances), the WhatsApp chat and where its photo lands, the kitten photos, turntable settings |
 | `src/config/products.ts` | the three products, variants, prices (pence), shipping, the £1 snack |
 | `src/config/stories.ts` | short "Kitty Stories" vignettes for `/stories` |
-| `src/config/kitty.ts` | Kitty's chat persona (system prompt), opening line "Check this out" |
+| `src/config/kitty.ts` | The fixed parts of Kitty's chat persona (identity, story, style, rules) and the default opening line; the sliders and notes are Kitty Tunables on `/admin` (`src/lib/persona.ts` compiles both into her system prompt) |
 
 ## Pages
 
@@ -45,9 +45,9 @@ toast, showToast(msg)
 | Directory | Exports | Notes |
 |---|---|---|
 | `src/components/smooth/SmoothScroll.tsx` | `default SmoothScroll({children})` | Lenis + `gsap.ticker`, `ScrollTrigger.scrollerProxy` not needed (Lenis drives native scroll). Respects reduced motion. Exposes `window.__lenis` for scroll-to helpers. |
-| `src/components/chrome/*` | `default Chrome()` | Fixed top-right translucent **three-line-stack** button; side drawer with `Kitty Stories`, `Kitty Store`, `Scroll to top`, `Scroll to bottom`; floating small camera button (bottom-right) that opens the try-on. Rendered on every page via `src/app/layout.tsx`? **No** — rendered by each page so the landing can hide the small camera while the hero camera is on screen. |
+| `src/components/chrome/*` | `default Chrome()` | **Kitty's face** (`KittyFace.tsx`, also the favicon and Apple touch icon) in a 44px glass button top-left: home from every page, back to the top on the landing. Fixed top-right translucent **three-line-stack** button; side drawer that starts with Kitty (home), then `Kitty Stories`, `Kitty Store`, `Try it on`, `Sign in`/`Your account`, `Scroll to top`, `Scroll to bottom`, the current page marked; floating small camera button (bottom-right) that opens the try-on, hidden with `hideCamera` where it would cover buttons (landing, store, checkout, the try-on itself). `layout.ts` exports the chrome row's geometry for pages that put controls near it. Rendered by each page, not the root layout. |
 | `src/components/hero/*` | `default Hero()` | R3F canvas filling the **top third of a phone screen** (`h-[34dvh]`): a stylised camera model that spins slowly, tilts, and bounces slightly; tap → `/try-on`. Title `Kitty`, tagline, scroll cue. Build the camera procedurally from primitives (body box, lens cylinders, flash, strap) so there is no licence and no download; a GLB at `/models/camera.glb` overrides it if present. |
-| `src/components/landing/SwipeStory/*` | `default SwipeStory()` | The landing story, played by swipes (since 23 Sep 2026; it replaced the scroll-scrubbed engine). One 100dvh stage under the hero: a canvas for the clip frames plus DOM layers for the choreography. `timeline.ts` turns the chapters into one timeline of seconds with a **stop** per chapter and makes every visual a pure function of the playhead (so reversing and hold-and-drag scrubbing need nothing special); `engine.ts` owns the playhead, the gestures (swipe, wheel, keys, press-and-hold to pause, drag to scrub) and the page modes (intro under the hero → engaged full screen → released after the last stop or Skip); `painter.ts` draws frames (blended pairs, cover on phones, a 9:16 column over a blurred copy when wide); `overlays.ts` writes the WhatsApp flight, the kitten polaroids and clock, the MISSING flyer, the stand-in moods, the assembling captions and the rail; `media.ts` loads `index.json`, manifests, every chapter's final frame and the frames near the chapter being watched. Chapters without a clip play a designed stand-in and pick their clip up after `npm run story`. `prefers-reduced-motion`: stills and crossfades, captions already set. `window.__swipeStory.debugState()` / `debugSeek(t)` exist for `scripts/verify.mjs`. |
+| `src/components/landing/SwipeStory/*` | `default SwipeStory()` | The landing story, played by swipes (since 23 Sep 2026; it replaced the scroll-scrubbed engine). One 100dvh stage under the hero: a canvas for the clip frames plus DOM layers for the choreography. `timeline.ts` turns the chapters into one timeline of seconds with a **stop** per chapter and makes every visual a pure function of the playhead (so reversing and hold-and-drag scrubbing need nothing special); `engine.ts` owns the playhead, the gestures (swipe, wheel, keys, press-and-hold to pause, drag to scrub) and the page modes (intro under the hero → engaged full screen → released after the last stop or Skip); `painter.ts` draws frames (blended pairs, cover on phones, a 9:16 column over a blurred copy when wide); `overlays.ts` writes the WhatsApp flight, the kitten polaroids and clock, the MISSING flyer, the stand-in moods, the assembling captions and the rail; `media.ts` loads `index.json`, manifests and every chapter's final frame (kept), keeps every frame's compressed bytes, and decodes only a **window** around the playhead (≈30 frames on phones, ≈70 on computers, leading the way it moves, plus the next chapter's first frames), because a whole decoded clip is 170 MB and iOS Safari will not hold two; broken frames are retried, then skipped. `report.ts` sends one anonymous technical summary per visit to `/api/story-report` (see Platform). Chapters without a clip play a designed stand-in and pick their clip up after `npm run story`. `prefers-reduced-motion`: stills and crossfades, captions already set. `window.__swipeStory.debugState()` / `debugSeek(t)` exist for `scripts/verify.mjs`. |
 | `src/components/story/*` | `default StoryEnd()`, frame loading | `StoryEnd` = Turntable + the two big buttons. `frameLoader.ts` (limiter, manifests, decode) and `useFrameSequence.ts` (`SequenceController`) are shared by SwipeStory, the chapter reader and the turntable. |
 | `src/components/turntable/*` | `default Turntable()` | Swipe/drag to spin Kitty using N photos from `/turntable/manifest.json`; inertia; falls back to a single placeholder silhouette when absent. |
 | `src/components/store/*` + `src/app/store/page.tsx` | `default StoreScene()` | R3F living room (a placeholder room built from primitives until `/models/room.glb` exists — window with river light, sofa, kitchen counter), Kitty NPC (`/models/kitty.glb` if present, else a procedural black-and-white cat) walking between "presentation spots", the current product floating and rotating beside her, `Next`/`Previous` arrows, product panel (name, method, price, variant picker, **Buy** → `POST /api/checkout`), chat dock. Kitty always opens with `KITTY.opening` ("Check this out"). |
@@ -76,12 +76,19 @@ role key on the server; the browser never writes them. RLS on, no client policie
 
 ## Claude chat (from the `claude-api` skill)
 
-- `@anthropic-ai/sdk`, `client.messages.stream(...)`, `model: "claude-opus-5"`,
-  `output_config: { effort: "low" }` (a cat persona does not need deep reasoning),
-  `max_tokens: 1024`, system prompt from `src/config/kitty.ts` with
-  `cache_control: { type: "ephemeral" }` on the stable system block, product
-  context appended as a **second** system block after it.
-- Route returns a `text/plain` streaming `Response` built from `stream.on("text")`.
+- `@anthropic-ai/sdk`, `client.beta.messages.stream(...)`, `model: "claude-opus-5"`,
+  `output_config: { effort }` from the Tunables (default `low`: a cat persona
+  does not need deep reasoning), `max_tokens: 1024`, server-side refusal
+  fallbacks on (`betas: ["server-side-fallback-2026-07-01"]`, `fallbacks: "default"`).
+- System prompt = `compileSystem(tunables)` (`src/lib/persona.ts`: the fixed
+  persona in `src/config/kitty.ts` + the sliders' sentences + her human's notes;
+  deterministic, so it stays cached until someone saves new Tunables) with
+  `cache_control: { type: "ephemeral" }`, product context appended as a
+  **second** system block after it. Tunables are read from `pet_personas` with a
+  one-minute memory and are never taken from the request body.
+- Route returns a `text/plain` streaming `Response` built from `stream.on("text")`;
+  a turn that ends with no text (a refusal the fallbacks could not rescue) gets
+  an in-character line.
 - No API key → route returns a canned, in-character reply so the UI still works.
 
 ## Assets and slots (all optional; the site is complete without them)
@@ -109,7 +116,10 @@ role key on the server; the browser never writes them. RLS on, no client policie
 ## Platform (added 22 Sep 2026)
 
 Multi-pet from the start: **pets → volumes → chapters → chapter_scenes**
-(+ `chapter_builds`, the owner's private notes). Kitty is the pet in
+(+ `chapter_builds`, the owner's private notes; `pet_personas`, each pet's
+chat Tunables, public read and editor write; `story_reports`, anonymous
+landing diagnostics written only through `report_story()`, capped at 2000 a
+day and 30 days, admin read). Kitty is the pet in
 `SITE.petSlug`. Schema and policies: `supabase/migrations/`; Kitty's content:
 `supabase/seed/kitty.sql`; RLS smoke test: `supabase/tests/rls-smoke.sql`.
 
@@ -120,9 +130,10 @@ Multi-pet from the start: **pets → volumes → chapters → chapter_scenes**
 | `/stories/new?volume=<slug>` | Chapter studio: photos + "what happened" → Claude draft → scenes with Kling prompts |
 | `/stories/<chapter>/edit` | The same studio for an existing chapter: scenes, prompts, 9:16 start frames, clip upload |
 | `/account` | Sign in / create account / forgotten password / set new password |
-| `/admin` | Admin-only dashboard (Kitty Tunables arrive in Phase 3) |
+| `/admin` | Admin-only dashboard: **Kitty Tunables** (sliders, length, effort, opening line, notes; live preview of her full instructions), connected services, the book at a glance |
 | `/api/chapters/draft` | Claude Opus 5 drafts a chapter from photos + text (editors only, structured output, fallbacks) |
 | `/api/admin/status` | Which services this deployment has keys for (admins only) |
+| `/api/story-report` | One anonymous technical summary of how the landing story went on a device (sendBeacon); stored via `report_story()` |
 
 | Module | Owns |
 |---|---|
@@ -130,6 +141,8 @@ Multi-pet from the start: **pets → volumes → chapters → chapter_scenes**
 | `src/lib/auth/{authLanding,store}.ts` | Reset/confirm link capture before supabase-js consumes it; the auth store (live or pretend) |
 | `src/lib/stories/{types,read,client,media,draft}.ts` | Shapes and row mapping; server reads; browser writes (live + demo backends); photo resizing; draft schema |
 | `src/lib/studio/frames.ts` | Browser-side clip → frames and 9:16 start-frame crops |
+| `src/lib/persona.ts`, `personaServer.ts`, `personaClient.ts` | Kitty Tunables: types, defaults, validation, the deterministic prompt compiler; the chat route's cached read; the browser's read/save (demo: localStorage) and `useOpeningLine()` |
+| `src/components/admin/TunablesEditor.tsx` | The Tunables editor on `/admin` |
 | `src/components/stories/*` | RippleGrid, TileFace, TileEditor, VolumeEditor |
 | `src/components/reader/*` | ChapterReader, ReaderScene |
 | `src/components/studio/*` | ChapterStudio, SceneCard |

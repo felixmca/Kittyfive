@@ -3,16 +3,24 @@
  *
  * Body: { messages: [{ role: "user" | "assistant", content: string }], productIndex: number }
  *
- * - System prompt from src/config/kitty.ts is the stable, prompt-cached block;
- *   the current product context is a second system block after it.
+ * - Her system prompt is compiled from src/config/kitty.ts and her Kitty
+ *   Tunables (set on /admin, read from the database, a minute's cache) by
+ *   src/lib/persona.ts. It is the prompt-cached block; the current product
+ *   context is a second system block after it. The Tunables also set effort.
+ *   Tunables are never taken from the request: only her editors set them.
+ * - Server-side refusal fallbacks are on (fallbacks: "default"): if Claude
+ *   Opus 5 declines a turn, the API reruns it on a fallback model in the same
+ *   call. A turn that still ends with no words gets an in-character line.
  * - No ANTHROPIC_API_KEY: a canned, in-character line is streamed so the UI
  *   works in demo mode.
  * - Anthropic API errors become a 502 with an in-character one-liner.
  * - Message contents are never logged.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { KITTY } from "@/config/kitty";
 import { PRODUCTS } from "@/config/products";
+import { SITE } from "@/config/site";
+import { compileSystem } from "@/lib/persona";
+import { loadTunables } from "@/lib/personaServer";
 import { clientKey, rateLimit } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
@@ -36,6 +44,8 @@ const CANNED: readonly string[] = [
 
 const OFFLINE = "The wifi fell in the river. Ask me again in a moment.";
 const BUSY = "Too many humans talking at once. Give me a minute.";
+/** A turn that ended with nothing to say (declined all the way down the fallbacks). */
+const BORED = "I have decided not to have an opinion about that. Ask me about snacks.";
 const BAD_KEY = "The humans gave me the wrong key. Press Buy; that part still works.";
 const BAD_REQUEST = "Say that again, slower. And shorter.";
 
@@ -149,17 +159,20 @@ export async function POST(req: Request): Promise<Response> {
 
   client ??= new Anthropic(); // reads ANTHROPIC_API_KEY
   const encoder = new TextEncoder();
+  const tunables = await loadTunables(SITE.petSlug);
 
   try {
-    const stream = client.messages.stream({
+    const stream = client.beta.messages.stream({
       model: "claude-opus-5",
       max_tokens: 1024,
-      output_config: { effort: "low" },
+      output_config: { effort: tunables.effort },
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
       system: [
-        { type: "text", text: KITTY.system, cache_control: { type: "ephemeral" } },
+        { type: "text", text: compileSystem(tunables), cache_control: { type: "ephemeral" } },
         { type: "text", text: productContext(productIndex) },
       ],
-      messages: messages as Anthropic.MessageParam[],
+      messages: messages as Anthropic.Beta.BetaMessageParam[],
     });
 
     // Text is buffered until the Response body is being read, so nothing
@@ -189,6 +202,12 @@ export async function POST(req: Request): Promise<Response> {
     stream.on("text", (t) => {
       gotText = true;
       emit(t);
+    });
+    // Nothing said by the end of the turn (a refusal the fallbacks could not
+    // rescue, or an empty reply): answer in character rather than go blank.
+    stream.on("finalMessage", (m) => {
+      if (!gotText) emit(BORED);
+      if (m.stop_reason === "refusal") console.warn("[api/chat] turn declined", m.stop_details?.category ?? "");
     });
     stream.on("end", finish);
     stream.on("abort", finish);

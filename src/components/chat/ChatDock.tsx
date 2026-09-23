@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { KITTY } from "@/config/kitty";
 import { PRODUCTS } from "@/config/products";
+import { SITE } from "@/config/site";
+import { useOpeningLine } from "@/lib/personaClient";
 import { useUi } from "@/lib/store";
 import { useStoreState } from "@/components/store/storeState";
 import { wrapIndex } from "@/components/store/spots";
@@ -34,6 +36,7 @@ export default function ChatDock() {
   const setOpen = useUi((s) => s.setChatOpen);
   const productIndex = useUi((s) => s.productIndex);
   const product = PRODUCTS[wrapIndex(productIndex, PRODUCTS.length)];
+  const opening = useOpeningLine(SITE.petSlug);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -167,7 +170,7 @@ export default function ChatDock() {
         >
           {messages.length === 0 && (
             <p className="px-1 text-sm text-muted">
-              {KITTY.opening} Ask me about the {product.name}. Or anything, really.
+              {opening} Ask me about the {product.name}. Or anything, really.
             </p>
           )}
           {messages.map((m) => (
