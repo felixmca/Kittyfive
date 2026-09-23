@@ -173,6 +173,10 @@ async function withPage(browser, viewport, fn) {
     // Chromium says net::ERR_ABORTED, WebKit "Load request cancelled".
     const why = /ERR_ABORTED|cancelled/i.test(r.failure()?.errorText ?? "") ? "net::ERR_ABORTED" : r.failure()?.errorText ?? "";
     if (why === "net::ERR_ABORTED" && isExpectedMissing(u)) return; // aborted probe
+    // A page load superseded by the test's own next step (a reload or goto;
+    // WebKit reports the old document's load as cancelled). The page that
+    // replaces it is checked on its own.
+    if (why === "net::ERR_ABORTED" && r.isNavigationRequest()) return;
     // A story frame or manifest still in flight when the test moves on (a reload, the next page).
     if (why === "net::ERR_ABORTED" && /\/story\//.test(new URL(u).pathname)) return;
     // Chromium labels a fully-consumed chunked streaming response ERR_ABORTED
