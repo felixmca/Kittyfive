@@ -33,7 +33,9 @@ import {
 import { cappedDpr, prefersReducedMotion } from "@/components/story/motion";
 import CatSilhouette from "./CatSilhouette";
 
-const SIZE = "min(86vw, 420px)";
+// Never more than 42% of the screen's height, so on a short phone the end of
+// the landing still shows both of its buttons.
+const SIZE = "min(86vw, 420px, 42dvh)";
 /** Virtual frame count for the placeholder disc. */
 const PLACEHOLDER_FRAMES = 36;
 /** Requested first so a quarter-turn preview is ready almost immediately. */

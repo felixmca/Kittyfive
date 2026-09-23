@@ -47,7 +47,7 @@ function TryOnCrashed() {
 export default function TryOnClient() {
   return (
     <>
-      <Chrome />
+      <Chrome hideCamera />
       <ArErrorBoundary label="TryOn" fallback={<TryOnCrashed />}>
         <TryOn />
       </ArErrorBoundary>

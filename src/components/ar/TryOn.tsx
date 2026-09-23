@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRODUCTS, type Product } from "@/config/products";
 import { useUi } from "@/lib/store";
+import { CLEAR_OF_HOME } from "@/components/chrome/layout";
 import KittyCompanion from "./KittyCompanion";
 import MockupFallback from "./MockupFallback";
 import Overlay from "./Overlay";
@@ -462,10 +463,10 @@ export default function TryOn({ onClose }: TryOnProps = {}) {
       {/* Kitty on the floor */}
       <KittyCompanion canvasRef={kittyCanvasRef} />
 
-      {/* top bar: controls left, hint centre, right kept clear for the site menu */}
+      {/* top bar: controls left (after Kitty's home button), hint centre, right kept clear for the site menu */}
       <div
         className="absolute inset-x-0 top-0 z-20 grid grid-cols-[auto_1fr_auto] items-start gap-2 px-3"
-        style={SAFE_TOP}
+        style={{ ...SAFE_TOP, paddingLeft: CLEAR_OF_HOME }}
       >
         <div className="flex gap-2">
           {onClose && (

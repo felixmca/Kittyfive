@@ -78,6 +78,10 @@ interface Hold {
 
 const HOLD_MS = 250;
 const SPLASH_AFTER_MS = 400;
+/** Stop waiting for the chat image's decode() (it has been seen never to settle). */
+const CHAT_WAIT_MS = 3000;
+/** After this, start with whatever has arrived; playback waits for the rest frame by frame. */
+const START_ANYWAY_MS = 7000;
 const RATE = { forward: 1, hurry: 2.2, back: 2.5 };
 const SCROLL_MS = { engage: 650, release: 900 };
 
@@ -113,8 +117,14 @@ export class SwipeEngine {
   private wheel = { acc: 0, last: 0, spent: false };
   private hintTimer = 0;
   private splashTimer = 0;
+  private chatTimer = 0;
+  private watchdog = 0;
+  private bootAt = 0;
   private firstFrameAt = 0;
   private chatReady = false;
+  /** Which way the last scrub went, so the decode window leads that way. */
+  private scrubDir = 1;
+  private drawFailed = false;
   private announced = -1;
   private destroyed = false;
   private cleanups: (() => void)[] = [];
@@ -148,6 +158,8 @@ export class SwipeEngine {
     window.clearTimeout(this.holdTimer);
     window.clearTimeout(this.hintTimer);
     window.clearTimeout(this.splashTimer);
+    window.clearTimeout(this.chatTimer);
+    window.clearTimeout(this.watchdog);
     this.cleanups.forEach((fn) => fn());
     this.cleanups = [];
     this.media.destroy();
@@ -155,17 +167,20 @@ export class SwipeEngine {
   }
 
   private async boot(): Promise<void> {
+    this.bootAt = performance.now();
+    // The chat should be decoded before it flies, but never hold the story
+    // hostage to it: whichever comes first, decode() settling or a timeout.
     const chat = this.els.chat as HTMLImageElement;
-    const chatLoad = chat.decode
-      ? chat.decode().then(
-          () => undefined,
-          () => undefined,
-        )
-      : Promise.resolve();
-    void chatLoad.then(() => {
+    const chatDone = () => {
+      if (this.chatReady) return;
       this.chatReady = true;
+      window.clearTimeout(this.chatTimer);
       this.onMedia();
-    });
+    };
+    if (typeof chat.decode === "function") chat.decode().then(chatDone, chatDone);
+    else chatDone();
+    this.chatTimer = window.setTimeout(chatDone, CHAT_WAIT_MS);
+    this.watchdog = window.setTimeout(this.onMedia, START_ANYWAY_MS + 50);
 
     await this.media.init();
     if (this.destroyed) return;
@@ -173,7 +188,7 @@ export class SwipeEngine {
     this.placeRailDots();
     this.cleanups.push(this.media.subscribe(this.onMedia));
     void this.media.loadFinals();
-    if (!this.reduced) this.media.setResident(0, true, 0);
+    this.updateResidency();
     this.onMedia();
   }
 
@@ -192,10 +207,14 @@ export class SwipeEngine {
     const tl = this.tl!;
     const first = tl.spans[0];
     if (!first.clip) return true; // a stand-in needs nothing
-    if (this.reduced) return this.media.hasFinal(0);
+    // Slow or stuck: start with anything at all to show; playback waits for each frame.
+    const late = performance.now() - this.bootAt > START_ANYWAY_MS;
+    if (this.reduced) return this.media.hasFinal(0) || (late && this.media.decodedPrefix(0) > 0);
+    if (late) return this.media.decodedPrefix(0) > 0 || this.media.hasFinal(0);
     if (!this.chatReady && tl.spans.some((s) => s.enter === "whatsapp")) return false;
     const n = first.clip.frames;
-    const have = this.media.prefix(0);
+    if (this.media.decodedPrefix(0) < Math.min(n, 4)) return false;
+    const have = this.media.fetchedPrefix(0);
     if (have >= n) return true;
     if (have < Math.min(n, 24)) return false;
     // Start early only if the rest will arrive before playback needs it.
@@ -210,7 +229,7 @@ export class SwipeEngine {
     const tl = this.tl;
     const clip = tl?.spans[0].clip;
     if (!clip) return;
-    const have = this.reduced ? (this.media.hasFinal(0) ? 1 : 0) : this.media.prefix(0);
+    const have = this.reduced ? (this.media.hasFinal(0) ? 1 : 0) : this.media.fetchedPrefix(0);
     if (have && !this.firstFrameAt) this.firstFrameAt = performance.now();
     const need = this.reduced ? 1 : clip.frames;
     const p = (have + (this.chatReady ? 1 : 0)) / (need + 1);
@@ -220,6 +239,7 @@ export class SwipeEngine {
   private begin(): void {
     this.started = true;
     window.clearTimeout(this.splashTimer);
+    window.clearTimeout(this.watchdog);
     this.setSplash(false);
     const tl = this.tl!;
     this.els.stage.dataset.ready = "true";
@@ -269,6 +289,8 @@ export class SwipeEngine {
         this.t = next;
         again = true;
       }
+      // The decode window follows the playhead (a no-op until it crosses a frame).
+      this.updateResidency();
     }
     this.render();
     if (again) this.kick();
@@ -304,20 +326,27 @@ export class SwipeEngine {
   }
 
   /**
-   * Keep frames decoded only where they can be seen: the chapter under the
-   * playhead, the one it is heading for, and the next one (preloading). A
-   * chapter's final frame is kept separately, so flights and stops never need
-   * the whole clip of the chapter before. (A decoded 576×1024 clip is ~170 MB.)
+   * Point the decode window at the playhead: frames around it in the chapter
+   * on screen, leading the way it is moving, plus the start of the chapter it
+   * plays next. Every chapter's final frame is kept separately, so stops,
+   * stand-ins and the chat flight never need a whole clip decoded (media.ts).
    */
   private updateResidency(): void {
     const tl = this.tl;
     if (!tl || this.reduced) return;
     const here = spanIndexAt(tl, this.t);
-    const focus = spanIndexAt(tl, this.target ?? this.t);
-    tl.spans.forEach((s, i) => {
-      const on = i === here || i === focus || i === focus + 1;
-      this.media.setResident(i, on, Math.abs(i - focus));
-    });
+    const s = tl.spans[here];
+    const moving = this.hold ? this.scrubDir : Math.sign((this.target ?? this.t) - this.t);
+    const dir = moving < 0 ? -1 : 1;
+    const pos = s.clip ? clamp((this.t - s.clipStart) / Math.max(0.001, s.clipEnd - s.clipStart), 0, 1) * (s.clip.frames - 1) : 0;
+    let next = -1;
+    for (let k = here + dir; k >= 0 && k < tl.spans.length; k += dir) {
+      if (tl.spans[k].clip) {
+        next = k;
+        break;
+      }
+    }
+    this.media.focus({ chapter: s.clip ? here : -1, pos, dir, next });
   }
 
   private nextStopAfter(t: number): number | null {
@@ -333,7 +362,13 @@ export class SwipeEngine {
 
   forward(): void {
     const tl = this.tl;
-    if (!tl || !this.started || this.released) return;
+    if (this.released) return;
+    if (!tl || !this.started) {
+      // Still loading: bring the stage (its splash and Skip) up; chapter 1
+      // starts full screen as soon as it can.
+      if (this.mode === "intro") this.engage();
+      return;
+    }
     this.setHint(false);
     const last = tl.stops.length - 1;
     if (this.mode === "intro") {
@@ -519,12 +554,42 @@ export class SwipeEngine {
     on("resize", this.onResize);
 
     const stage = this.els.stage;
-    // Belt and braces for the stage itself (the page lock covers the rest).
+    // While the story owns the page, one-finger touch moves never scroll it
+    // natively, wherever they start (the hero too). touch-action on <body>
+    // should already say so; iOS gets this as well, because a native scroll
+    // there cancels the pointer (no swipe) and carries the page past the story.
     const block = (e: TouchEvent) => {
-      if (!this.released && e.touches.length < 2) e.preventDefault();
+      if (this.released || e.touches.length > 1 || !e.cancelable) return;
+      if (useUi.getState().drawerOpen) return;
+      const el = e.target instanceof Element ? e.target : null;
+      if (el?.closest("[data-lenis-prevent], [role='dialog'], input, textarea, select")) return;
+      e.preventDefault();
     };
-    stage.addEventListener("touchmove", block, { passive: false });
-    this.cleanups.push(() => stage.removeEventListener("touchmove", block));
+    document.addEventListener("touchmove", block, { passive: false });
+    this.cleanups.push(() => document.removeEventListener("touchmove", block));
+
+    // Back from another tab or app, or from the back/forward cache: the decode
+    // window was given back while hidden, and iOS may have dropped the
+    // canvas's pixels, so load and draw again.
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        this.media.suspend();
+        return;
+      }
+      this.media.resume();
+      this.redraw();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    this.cleanups.push(() => document.removeEventListener("visibilitychange", onVisibility));
+    const onPageShow = () => {
+      this.media.resume();
+      if (!this.scrolling) this.syncMode();
+      this.redraw();
+    };
+    on("pageshow", onPageShow);
+    const canvas = this.els.canvas;
+    canvas.addEventListener("contextrestored", this.redraw);
+    this.cleanups.push(() => canvas.removeEventListener("contextrestored", this.redraw));
 
     const onSkip = (e: Event) => {
       e.preventDefault();
@@ -694,7 +759,9 @@ export class SwipeEngine {
     const tl = this.tl;
     if (!g || !h || !tl) return;
     const d = (g.x - h.x0 - (g.y - h.y0)) / Math.max(240, this.layout.view.h);
-    this.t = clamp(h.t0 + d * (d < 0 ? h.back : h.fwd), 0, tl.end);
+    const t = clamp(h.t0 + d * (d < 0 ? h.back : h.fwd), 0, tl.end);
+    if (Math.abs(t - this.t) > 1e-4) this.scrubDir = t > this.t ? 1 : -1;
+    this.t = t;
     // Scrubbing back into a chapter whose frames were let go loads them again.
     this.updateResidency();
     this.kick();
@@ -765,7 +832,27 @@ export class SwipeEngine {
     return computeLayout(W, H, visible, cappedDpr(2));
   }
 
+  /** Draw again from scratch on the next frame. */
+  private redraw = (): void => {
+    this.layoutDirty = true;
+    this.lastDrawn = "";
+    this.kick();
+  };
+
   private render(): void {
+    try {
+      this.paint();
+    } catch (err) {
+      // One bad frame must not stop the loop; try again on the next change.
+      this.lastDrawn = "";
+      if (!this.drawFailed) {
+        this.drawFailed = true;
+        console.warn("[story] draw failed", err);
+      }
+    }
+  }
+
+  private paint(): void {
     if (this.layoutDirty) {
       this.layoutDirty = false;
       const next = this.measure();
@@ -803,7 +890,15 @@ export class SwipeEngine {
   }
 
   /** For the verify harness: where the story is. */
-  debugState(): { t: number; target: number | null; mode: Mode; stops: number[]; started: boolean; holding: boolean } {
+  debugState(): {
+    t: number;
+    target: number | null;
+    mode: Mode;
+    stops: number[];
+    started: boolean;
+    holding: boolean;
+    media: ReturnType<StoryMedia["stats"]>;
+  } {
     return {
       t: this.t,
       target: this.target,
@@ -811,6 +906,7 @@ export class SwipeEngine {
       stops: this.tl?.stops ?? [],
       started: this.started,
       holding: Boolean(this.hold),
+      media: this.media.stats(),
     };
   }
 

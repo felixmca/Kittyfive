@@ -26,7 +26,8 @@ const StoryEnd = dynamic(() => import("@/components/story/StoryEnd"), { ssr: fal
 export default function Landing() {
   return (
     <SmoothScroll>
-      <Chrome hideCameraUntilScrolled />
+      {/* No floating camera here: the hero's camera and StoryEnd's "Try it on" lead to the try-on. */}
+      <Chrome hideCamera />
       <main className="relative">
         <Hero />
         <SwipeStory />

@@ -22,6 +22,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Chrome from "@/components/chrome/Chrome";
+import { CHROME_TOP, CLEAR_OF_HOME } from "@/components/chrome/layout";
 import TileFace from "@/components/stories/TileFace";
 import ReaderScene, { type SceneRegistry } from "./ReaderScene";
 import { SITE } from "@/config/site";
@@ -205,11 +206,12 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
       <Chrome />
       {entry ? (
         <div
-          className="pointer-events-none fixed left-0 top-0 z-[40] flex items-center"
-          style={{ paddingTop: "max(12px, env(safe-area-inset-top))", paddingLeft: "max(14px, env(safe-area-inset-left))" }}
+          // In the chrome row, beside Kitty's home button and clear of the menu.
+          className="pointer-events-none fixed z-[40] flex h-11 items-center"
+          style={{ top: CHROME_TOP, left: CLEAR_OF_HOME, maxWidth: "calc(100vw - 132px)" }}
           data-reader-position
         >
-          <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-fg/85 backdrop-blur-md">
+          <span className="truncate rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-fg/85 backdrop-blur-md">
             {`Vol ${entry.volumeNumber} · ${entry.volumeTitle}`}
           </span>
         </div>
@@ -329,6 +331,9 @@ function TheEnd({ petName }: { petName: string }) {
           {SITE.nav.store.label}
         </Link>
       </div>
+      <Link href="/" className="text-[14px] text-muted underline-offset-4 hover:text-fg hover:underline">
+        Back to the start of {petName}&apos;s story
+      </Link>
     </section>
   );
 }

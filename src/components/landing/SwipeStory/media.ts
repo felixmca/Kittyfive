@@ -1,144 +1,439 @@
 /**
- * Loads what the story needs, in the order it needs it.
+ * Loads what the story needs, in the order it needs it, and keeps only a
+ * small window of it decoded.
  *
  *   /story/index.json          which chapters have frames (no request at all
  *                              for the others, so no 404s)
  *   <chapter>/manifest.json    frame count, size and clip length
- *   <chapter>/<last>.webp      every chapter's final frame, kept for the whole
- *                              visit: stops, stand-ins, the chat flight
- *   <chapter>/0001.webp …      the playing chapters' frames, in playback order
+ *   <chapter>/<last>.webp      every chapter's final frame, decoded and kept
+ *                              for the whole visit: stops, stand-ins, the flight
+ *   <chapter>/0001.webp …      every frame as compressed bytes (about 45 KB
+ *                              each, kept once fetched), decoded only inside a
+ *                              window around the playhead
  *
- * Frame sets are resident only near the chapter being watched (the caller
- * decides); decoding goes through the shared limiter in frameLoader.
+ * Why a window: a decoded 576×1024 frame is 2.4 MB, so one clip is 170 MB and
+ * two are more than iOS Safari lets a page hold (the story went blank on an
+ * iPhone with two chapters decoded, 23 Sep 2026). The window keeps about 30
+ * frames decoded on phones and 70 on computers, decoding ahead of the
+ * playhead in the direction it is moving, plus the first frames of the
+ * chapter it will play next. A frame that will not load or decode after a few
+ * tries is marked broken and its neighbour stands in, so playback never waits
+ * on it forever.
  */
-import { fetchManifest, frameUrl, loadFrame, releaseFrame, type FrameImage } from "@/components/story/frameLoader";
-import { SequenceController } from "@/components/story/useFrameSequence";
+import {
+  decodeFrameBlob,
+  fetchFrameBlob,
+  fetchManifest,
+  frameUrl,
+  loadFrame,
+  releaseFrame,
+  schedule,
+  type FrameImage,
+} from "@/components/story/frameLoader";
 import type { LandingChapter } from "@/config/story";
 import type { ClipInfo } from "./timeline";
 
 const INDEX_URL = "/story/index.json";
+/** Give up on the index or a manifest after this long (the story then plays stand-ins). */
+const META_TIMEOUT_MS = 9000;
+const FETCH_TRIES = 3;
+const DECODE_TRIES = 2;
+
+/** Where the playhead is and where it is going; the window follows it. */
+export interface Focus {
+  /** Chapter whose frames are on screen (-1: a stand-in or nothing). */
+  chapter: number;
+  /** Fractional frame position in that chapter. */
+  pos: number;
+  /** +1 playing on, -1 playing back. */
+  dir: number;
+  /** The chapter with a clip that plays next in that direction (-1: none). */
+  next: number;
+}
+
+interface Budget {
+  /** Frames decoded ahead of the playhead, and behind it. */
+  ahead: number;
+  behind: number;
+  /** First frames of the next chapter kept ready, so a swipe starts at once. */
+  head: number;
+  /** Decodes at the same time. */
+  decoders: number;
+}
+
+const PHONE: Budget = { ahead: 18, behind: 6, head: 8, decoders: 2 };
+const COMPUTER: Budget = { ahead: 36, behind: 16, head: 16, decoders: 3 };
+
+function smallDevice(): boolean {
+  if (typeof navigator === "undefined") return true;
+  const ua = navigator.userAgent || "";
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  let coarse = false;
+  try {
+    coarse = window.matchMedia("(pointer: coarse)").matches;
+  } catch {
+    coarse = false;
+  }
+  return ios || coarse || (typeof memory === "number" && memory <= 4);
+}
+
+interface ChapterFrames {
+  dir: string;
+  pattern?: string;
+  clip: ClipInfo;
+  /** Compressed bytes, once fetched. */
+  blobs: (Blob | null)[];
+  fetching: Set<number>;
+  fetchTries: Uint8Array;
+  decoded: Map<number, FrameImage>;
+  decoding: Set<number>;
+  decodeTries: Uint8Array;
+  /** Could not be fetched or decoded: a neighbour stands in. */
+  broken: Set<number>;
+  final: FrameImage | null;
+}
+
+interface Want {
+  ch: number;
+  idx: number;
+  pr: number;
+}
 
 export class StoryMedia {
   clips: (ClipInfo | null)[] = [];
   /** Bumps whenever a frame is decoded, so a redraw can tell something changed. */
   version = 0;
-  private patterns: (string | undefined)[] = [];
-  private seqs: (SequenceController | null)[] = [];
-  private finals: (FrameImage | null)[] = [];
-  private priorities: number[] = [];
+  private chapters: (ChapterFrames | null)[] = [];
   private listeners = new Set<() => void>();
   private abort = new AbortController();
+  private readonly budget: Budget = smallDevice() ? PHONE : COMPUTER;
+  private focusKey = "";
+  private focusNow: Focus = { chapter: -1, pos: 0, dir: 1, next: -1 };
+  /** Frames the window wants decoded, most urgent first. */
+  private wants: Want[] = [];
+  private wanted: Set<number>[] = [];
+  private decodingCount = 0;
+  private suspended = false;
+  private destroyed = false;
 
-  constructor(private chapters: LandingChapter[]) {}
+  constructor(private readonly config: LandingChapter[]) {}
 
   private dir(i: number): string {
-    return `/story/${this.chapters[i].id}`;
+    return `/story/${this.config[i].id}`;
   }
 
-  /** Index, manifests and final frames. Resolves once the timeline can be built. */
+  /** Index and manifests. Resolves once the timeline can be built (stand-ins for anything missing). */
   async init(): Promise<void> {
     const { signal } = this.abort;
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), META_TIMEOUT_MS);
+    const onAbort = () => timeout.abort();
+    signal.addEventListener("abort", onAbort, { once: true });
     let listed: Record<string, unknown> | null = null;
     try {
-      const res = await fetch(INDEX_URL, { cache: "no-cache", signal });
+      const res = await fetch(INDEX_URL, { cache: "no-cache", signal: timeout.signal });
       if (res.ok) listed = (await res.json()) as Record<string, unknown>;
     } catch {
       listed = null;
     }
-    if (signal.aborted) return;
+    const patterns: (string | undefined)[] = [];
     this.clips = await Promise.all(
-      this.chapters.map(async (c, i) => {
+      this.config.map(async (c, i) => {
         // No index at all (an old deploy): ask each chapter for its manifest.
         if (listed && !(c.id in listed)) return null;
+        if (timeout.signal.aborted) return null;
         try {
-          const m = await fetchManifest(this.dir(i), signal);
+          const m = await fetchManifest(this.dir(i), timeout.signal);
           if (!m) return null;
-          this.patterns[i] = m.pattern;
+          patterns[i] = m.pattern;
           return { frames: m.frames, width: m.width, height: m.height, duration: m.duration ?? m.frames / 14.3 };
         } catch {
           return null;
         }
       }),
     );
-    this.seqs = this.clips.map(() => null);
-    this.finals = this.clips.map(() => null);
-    this.priorities = this.clips.map((_, i) => i);
+    clearTimeout(timer);
+    signal.removeEventListener("abort", onAbort);
+    this.chapters = this.clips.map((clip, i) =>
+      clip
+        ? {
+            dir: this.dir(i),
+            pattern: patterns[i],
+            clip,
+            blobs: new Array<Blob | null>(clip.frames).fill(null),
+            fetching: new Set(),
+            fetchTries: new Uint8Array(clip.frames),
+            decoded: new Map(),
+            decoding: new Set(),
+            decodeTries: new Uint8Array(clip.frames),
+            broken: new Set(),
+            final: null,
+          }
+        : null,
+    );
+    this.wanted = this.clips.map(() => new Set<number>());
   }
 
-  /** Fetch every chapter's final frame (small, kept). Chapter 1's first. */
+  /** Fetch every chapter's final frame (decoded and kept). Chapter 1's first. */
   loadFinals(): Promise<void> {
     const { signal } = this.abort;
     return Promise.all(
-      this.clips.map(async (clip, i) => {
-        if (!clip) return;
-        try {
-          const img = await loadFrame(frameUrl(this.dir(i), this.patterns[i], clip.frames), signal);
-          if (signal.aborted) {
-            releaseFrame(img);
-            return;
+      this.chapters.map(async (ch) => {
+        if (!ch) return;
+        const last = ch.clip.frames;
+        for (let attempt = 0; attempt < FETCH_TRIES && !ch.final; attempt++) {
+          try {
+            const img = await loadFrame(frameUrl(ch.dir, ch.pattern, last), signal);
+            if (signal.aborted || this.destroyed) {
+              releaseFrame(img);
+              return;
+            }
+            ch.final = img;
+            this.emit();
+          } catch {
+            if (signal.aborted) return;
+            await wait(400 * (attempt + 1));
           }
-          this.finals[i] = img;
-          this.emit();
-        } catch {
-          /* the playing sequence will supply it */
         }
       }),
     ).then(() => undefined);
   }
 
-  /** Keep chapter i's frames decoded (true) or let them go (false). */
-  setResident(i: number, on: boolean, priority = i): void {
-    const clip = this.clips[i];
-    if (!clip) return;
-    this.priorities[i] = priority;
-    const seq = this.seqs[i];
-    if (on && !seq) {
-      const c = new SequenceController();
-      c.priority = () => this.priorities[i];
-      c.subscribe(() => this.emit());
-      c.start({ dir: this.dir(i), hint: "present", order: "sequential" });
-      this.seqs[i] = c;
-    } else if (!on && seq) {
-      seq.stop();
-      this.seqs[i] = null;
+  // ─── the window ───────────────────────────────────────────────────────────
+
+  /** Move the window. Cheap when nothing changed, so it can be called every frame. */
+  focus(f: Focus): void {
+    const pos = Math.max(0, Math.round(f.pos));
+    const dir = f.dir < 0 ? -1 : 1;
+    const key = `${f.chapter}|${pos}|${dir}|${f.next}`;
+    if (key === this.focusKey) return;
+    this.focusKey = key;
+    this.focusNow = { chapter: f.chapter, pos, dir, next: f.next };
+    this.plan();
+  }
+
+  /** Which frames to decode (and so which to let go), then fetch and decode what is missing. */
+  private plan(): void {
+    const { chapter, pos, dir, next } = this.focusNow;
+    const b = this.budget;
+    const wants: Want[] = [];
+    const wanted = this.chapters.map(() => new Set<number>());
+    const push = (ch: number, idx: number, pr: number) => {
+      const c = this.chapters[ch];
+      if (!c || idx < 0 || idx >= c.clip.frames || wanted[ch].has(idx)) return;
+      wanted[ch].add(idx);
+      wants.push({ ch, idx, pr });
+    };
+    if (chapter >= 0) {
+      for (let d = 0; d <= b.ahead; d++) push(chapter, pos + d * dir, d);
+      for (let d = 1; d <= b.behind; d++) push(chapter, pos - d * dir, 3 + d * 2);
+    }
+    if (next >= 0 && next !== chapter) {
+      for (let d = 0; d < b.head; d++) push(next, dir > 0 ? d : this.chapters[next]!.clip.frames - 1 - d, 40 + d);
+    }
+    wants.sort((a, z) => a.pr - z.pr);
+    this.wants = wants;
+    this.wanted = wanted;
+
+    // Let go of what the window no longer covers (in-flight decodes are dropped when they land).
+    this.chapters.forEach((c, i) => {
+      if (!c) return;
+      for (const [idx, img] of c.decoded) {
+        if (!wanted[i].has(idx)) {
+          c.decoded.delete(idx);
+          releaseFrame(img);
+        }
+      }
+    });
+    this.fetchMissing();
+    this.pump();
+  }
+
+  /** The playing chapter and the next are fetched whole (the bytes are small); the window's frames first. */
+  private fetchMissing(): void {
+    if (this.destroyed) return;
+    const { chapter, next } = this.focusNow;
+    const order: number[] = [];
+    for (const ch of [chapter, next]) if (ch >= 0 && !order.includes(ch)) order.push(ch);
+    for (const ch of order) {
+      const c = this.chapters[ch];
+      if (!c) continue;
+      for (let idx = 0; idx < c.clip.frames; idx++) this.fetchOne(ch, idx);
     }
   }
 
+  /** Lower goes first: the playing chapter in playing order, then the next chapter from its start. */
+  private fetchPriority(ch: number, idx: number): number {
+    const { chapter, pos, dir, next } = this.focusNow;
+    const n = this.chapters[ch]?.clip.frames ?? 0;
+    if (ch === chapter) {
+      const d = (idx - pos) * dir;
+      return d >= 0 ? d : n + -d;
+    }
+    if (ch === next) return 3 * n + (dir > 0 ? idx : n - 1 - idx);
+    return 6 * n + idx;
+  }
+
+  private fetchOne(ch: number, idx: number): void {
+    const c = this.chapters[ch];
+    if (!c || c.blobs[idx] || c.fetching.has(idx) || c.broken.has(idx)) return;
+    c.fetching.add(idx);
+    const { signal } = this.abort;
+    schedule(
+      (sig) => fetchFrameBlob(frameUrl(c.dir, c.pattern, idx + 1), sig),
+      () => this.fetchPriority(ch, idx),
+      signal,
+    ).then(
+      (blob) => {
+        c.fetching.delete(idx);
+        if (this.destroyed) return;
+        c.blobs[idx] = blob;
+        this.emit();
+        this.pump();
+      },
+      () => {
+        c.fetching.delete(idx);
+        if (signal.aborted || this.destroyed) return;
+        c.fetchTries[idx]++;
+        if (c.fetchTries[idx] >= FETCH_TRIES) {
+          c.broken.add(idx);
+          this.emit();
+          return;
+        }
+        setTimeout(() => this.fetchOne(ch, idx), 500 * c.fetchTries[idx]);
+      },
+    );
+  }
+
+  /** Decode the most urgent wanted frames that have bytes, a few at a time. */
+  private pump(): void {
+    if (this.suspended || this.destroyed) return;
+    for (const w of this.wants) {
+      if (this.decodingCount >= this.budget.decoders) return;
+      const c = this.chapters[w.ch];
+      if (!c) continue;
+      const blob = c.blobs[w.idx];
+      if (!blob || c.decoded.has(w.idx) || c.decoding.has(w.idx) || c.broken.has(w.idx)) continue;
+      this.decode(w.ch, w.idx, blob);
+    }
+  }
+
+  private decode(ch: number, idx: number, blob: Blob): void {
+    const c = this.chapters[ch]!;
+    c.decoding.add(idx);
+    this.decodingCount++;
+    decodeFrameBlob(blob).then(
+      (img) => {
+        c.decoding.delete(idx);
+        this.decodingCount--;
+        if (this.destroyed || this.suspended || !this.wanted[ch]?.has(idx) || c.decoded.has(idx)) {
+          releaseFrame(img);
+        } else {
+          c.decoded.set(idx, img);
+          this.emit();
+        }
+        this.pump();
+      },
+      () => {
+        c.decoding.delete(idx);
+        this.decodingCount--;
+        if (this.destroyed) return;
+        c.decodeTries[idx]++;
+        if (c.decodeTries[idx] >= DECODE_TRIES) {
+          c.broken.add(idx);
+          this.emit();
+        }
+        this.pump();
+      },
+    );
+  }
+
+  /** The page went into the background: give the decoded window back (bytes and final frames stay). */
+  suspend(): void {
+    if (this.suspended) return;
+    this.suspended = true;
+    for (const c of this.chapters) {
+      if (!c) continue;
+      c.decoded.forEach((img) => releaseFrame(img));
+      c.decoded.clear();
+    }
+  }
+
+  resume(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    this.fetchMissing();
+    this.pump();
+    this.emit();
+  }
+
+  // ─── lookups ──────────────────────────────────────────────────────────────
+
   /** The frame to draw for chapter i at `index` (nearest decoded), or null. */
   frame = (i: number, index: number): FrameImage | null => {
-    const clip = this.clips[i];
-    if (!clip) return null;
-    const k = Math.max(0, Math.min(clip.frames - 1, index));
-    const exact = this.seqs[i]?.frames[k] ?? null;
+    const c = this.chapters[i];
+    if (!c) return null;
+    const n = c.clip.frames;
+    const k = Math.max(0, Math.min(n - 1, index));
+    const exact = c.decoded.get(k);
     if (exact) return exact;
-    if (k === clip.frames - 1 && this.finals[i]) return this.finals[i];
-    return this.seqs[i]?.getFrame(k) ?? this.finals[i] ?? null;
+    if (k === n - 1 && c.final) return c.final;
+    for (let d = 1; d < n; d++) {
+      const lo = c.decoded.get(k - d);
+      if (lo) return lo;
+      const hi = c.decoded.get(k + d);
+      if (hi) return hi;
+    }
+    return c.final;
   };
 
-  /** Is frame `index` of chapter i decoded (not just a stand-in neighbour)? */
+  /** Can frame `index` of chapter i be shown as itself (or is it broken, so a neighbour must do)? */
   has(i: number, index: number): boolean {
-    const clip = this.clips[i];
-    if (!clip) return true;
-    const k = Math.max(0, Math.min(clip.frames - 1, Math.round(index)));
-    if (k === clip.frames - 1 && this.finals[i]) return true;
-    return Boolean(this.seqs[i]?.frames[k]);
+    const c = this.chapters[i];
+    if (!c) return true;
+    const k = Math.max(0, Math.min(c.clip.frames - 1, Math.round(index)));
+    if (k === c.clip.frames - 1 && c.final) return true;
+    return c.decoded.has(k) || c.broken.has(k);
   }
 
   hasFinal(i: number): boolean {
-    return Boolean(this.finals[i]) || !this.clips[i];
+    const c = this.chapters[i];
+    return !c || Boolean(c.final);
   }
 
-  /** How many frames of chapter i are decoded from the start without a gap. */
-  prefix(i: number): number {
-    const frames = this.seqs[i]?.frames;
-    if (!frames) return 0;
+  /** Frames of chapter i whose bytes are here, counted from the start without a gap (broken ones count). */
+  fetchedPrefix(i: number): number {
+    const c = this.chapters[i];
+    if (!c) return 0;
     let n = 0;
-    while (n < frames.length && frames[n]) n++;
+    while (n < c.clip.frames && (c.blobs[n] || c.broken.has(n))) n++;
     return n;
   }
 
-  loaded(i: number): number {
-    return this.seqs[i]?.snap.loaded ?? 0;
+  /** Frames of chapter i decoded from the start without a gap. */
+  decodedPrefix(i: number): number {
+    const c = this.chapters[i];
+    if (!c) return 0;
+    let n = 0;
+    while (n < c.clip.frames && (c.decoded.has(n) || c.broken.has(n))) n++;
+    return n;
+  }
+
+  /** For the verify harness: how much is decoded right now. */
+  stats(): { decoded: number; finals: number; fetched: number; broken: number; budget: Budget } {
+    let decoded = 0;
+    let finals = 0;
+    let fetched = 0;
+    let broken = 0;
+    for (const c of this.chapters) {
+      if (!c) continue;
+      decoded += c.decoded.size;
+      finals += c.final ? 1 : 0;
+      fetched += c.blobs.filter(Boolean).length;
+      broken += c.broken.size;
+    }
+    return { decoded, finals, fetched, broken, budget: this.budget };
   }
 
   /** Something new was decoded. */
@@ -155,11 +450,20 @@ export class StoryMedia {
   }
 
   destroy(): void {
+    this.destroyed = true;
     this.abort.abort();
-    this.seqs.forEach((s) => s?.stop());
-    this.finals.forEach((f) => releaseFrame(f));
-    this.seqs = [];
-    this.finals = [];
+    for (const c of this.chapters) {
+      if (!c) continue;
+      c.decoded.forEach((img) => releaseFrame(img));
+      c.decoded.clear();
+      releaseFrame(c.final);
+      c.final = null;
+    }
+    this.chapters = [];
     this.listeners.clear();
   }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

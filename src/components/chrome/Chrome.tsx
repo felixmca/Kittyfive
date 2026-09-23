@@ -2,36 +2,44 @@
 /**
  * Chrome — the fixed controls every page wears on top of its content:
  *
- *  1. a 44px glass round button, top-right (safe-area aware), showing three
- *     stacked bars that fold into an X while the drawer is open;
- *  2. a side drawer from the right (min(320px, 84vw)) with four big rows:
- *     Kitty Stories · Kitty Store · Scroll to top · Scroll to bottom, plus the
- *     wordmark and tagline at the foot. Backdrop tap and Escape close it,
- *     focus is trapped inside, and page scroll is locked through Lenis
- *     (stop/start) or, without Lenis, through overflow on <html>;
- *  3. a 52px glass camera button, bottom-right, linking to /try-on. With
+ *  1. Kitty's face in a 44px glass round button, top-left (safe-area aware):
+ *     home, from every page. On the landing itself it goes back to the top,
+ *     where the story starts again under the camera;
+ *  2. a 44px glass round button, top-right, showing three stacked bars that
+ *     fold into an X while the drawer is open;
+ *  3. a side drawer from the right (min(320px, 84vw)): Kitty (home) at the
+ *     top with her face, then Kitty Stories · Kitty Store · Try it on ·
+ *     Sign in / Your account, then Scroll to top · Scroll to bottom. The page
+ *     you are on is marked. Backdrop tap and Escape close it, focus is
+ *     trapped inside, and page scroll is locked through Lenis (stop/start) or,
+ *     without Lenis, through overflow on <html>;
+ *  4. a 52px glass camera button, bottom-right, linking to /try-on. With
  *     `hideCameraUntilScrolled` it stays hidden until the page has scrolled
  *     past 60% of the viewport (so the landing's hero camera is not doubled);
- *  4. the toast renderer for useUi().toast, bottom-centre.
+ *  5. the toast renderer for useUi().toast, bottom-centre.
  *
  * Pages render this themselves (not the root layout) so the landing can pass
- * `hideCameraUntilScrolled`. Icons are inline SVG / CSS only; no icon library.
- * All motion is plain CSS transitions, which globals.css collapses to ~0ms
- * under prefers-reduced-motion.
+ * `hideCameraUntilScrolled`. Pages that put their own controls near the top
+ * corners keep clear of the two buttons with ./layout.ts. Icons are inline
+ * SVG / CSS only; no icon library. All motion is plain CSS transitions, which
+ * globals.css collapses to ~0ms under prefers-reduced-motion.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode, type Ref } from "react";
 import { SITE } from "@/config/site";
 import { scrollToBottom, scrollToTop, useUi } from "@/lib/store";
 import { hasStoredSession } from "@/lib/supabase/sessionHint";
 import { getLenis } from "@/components/smooth/SmoothScroll";
+import KittyFace from "./KittyFace";
+import { CHROME_LEFT, CHROME_TOP } from "./layout";
 
 const TRY_ON_HREF = "/try-on";
+const HOME_HREF = "/";
 const DRAWER_ID = "kitty-drawer";
 
 /** Safe-area aware offsets. `max()` keeps a floor on devices with no notch. */
-const SAFE_TOP = "max(12px, env(safe-area-inset-top))";
+const SAFE_TOP = CHROME_TOP;
 const SAFE_RIGHT = "max(12px, env(safe-area-inset-right))";
 const SAFE_BOTTOM = "max(16px, env(safe-area-inset-bottom))";
 const SAFE_LEFT = "max(16px, env(safe-area-inset-left))";
@@ -51,9 +59,11 @@ const FOCUS_RING =
 export interface ChromeProps {
   /** Keep the small camera button hidden until scrollY > 0.6 × innerHeight. */
   hideCameraUntilScrolled?: boolean;
+  /** No floating camera at all: the try-on itself, and pages whose own controls sit bottom-right. */
+  hideCamera?: boolean;
 }
 
-export default function Chrome({ hideCameraUntilScrolled = false }: ChromeProps) {
+export default function Chrome({ hideCameraUntilScrolled = false, hideCamera = false }: ChromeProps) {
   const drawerOpen = useUi((s) => s.drawerOpen);
   const setDrawerOpen = useUi((s) => s.setDrawerOpen);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -145,11 +155,57 @@ export default function Chrome({ hideCameraUntilScrolled = false }: ChromeProps)
 
   return (
     <>
+      <HomeButton />
       <MenuButton ref={menuButtonRef} open={drawerOpen} onClick={toggle} />
       <Drawer ref={panelRef} open={drawerOpen} onClose={close} />
-      <CameraButton hideUntilScrolled={hideCameraUntilScrolled} />
+      {hideCamera ? null : <CameraButton hideUntilScrolled={hideCameraUntilScrolled} />}
       <Toast />
     </>
+  );
+}
+
+/* ---------------------------------------------------------------- home */
+
+/**
+ * Home: a link to the landing from every page. On the landing it is the way
+ * back to the top instead (a same-page link would do nothing visible).
+ */
+function useGoHome(after?: () => void) {
+  const pathname = usePathname();
+  const onLanding = pathname === HOME_HREF;
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    after?.();
+    if (!onLanding || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    // The drawer's scroll lock lifts in an effect after this render commits,
+    // and Lenis ignores scrollTo() while stopped, so wait a frame.
+    requestAnimationFrame(() => {
+      try {
+        scrollToTop();
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+  return { onLanding, onClick };
+}
+
+function HomeButton() {
+  const { onLanding, onClick } = useGoHome();
+  return (
+    <Link
+      href={HOME_HREF}
+      onClick={onClick}
+      aria-label={onLanding ? "Kitty: back to the top" : "Kitty: back to the story"}
+      title={onLanding ? "Back to the top" : "Back to Kitty's story"}
+      data-home
+      // Under the drawer's backdrop (z-60), so an open menu dims it like the page.
+      className={`glass group fixed z-[55] flex h-11 w-11 items-center justify-center overflow-hidden rounded-full ${FOCUS_RING}`}
+      style={{ top: SAFE_TOP, left: CHROME_LEFT }}
+    >
+      <PressTint />
+      <KittyFace size={31} className="relative transition-transform duration-300 ease-out group-hover:scale-110 group-active:scale-95" />
+    </Link>
   );
 }
 
@@ -232,6 +288,8 @@ function Drawer({
   };
   const onScrollTop = closeThen(scrollToTop);
   const onScrollBottom = closeThen(scrollToBottom);
+  const home = useGoHome(onClose);
+  const inStories = pathname === SITE.nav.stories.href || pathname.startsWith(`${SITE.nav.stories.href}/`);
 
   return (
     <>
@@ -265,20 +323,43 @@ function Drawer({
           background:
             "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03)), rgba(11,11,12,0.78)",
           borderWidth: "0 0 0 1px",
-          paddingTop: `calc(${SAFE_TOP} + 64px)`,
+          // The home row (64px) is centred on the close button (44px) beside it.
+          paddingTop: `calc(${SAFE_TOP} - 10px)`,
           paddingBottom: SAFE_BOTTOM,
           paddingRight: SAFE_RIGHT,
           paddingLeft: SAFE_LEFT,
         }}
       >
-        <p className="px-4 text-[11px] font-medium uppercase tracking-[0.22em] text-accent">
-          Menu
-        </p>
+        {/* Home first: Kitty, her face and the tagline, level with the close button. */}
+        <Link
+          href={HOME_HREF}
+          onClick={home.onClick}
+          aria-current={home.onLanding ? "page" : undefined}
+          data-drawer-home
+          className={`group -ml-1 mr-[52px] flex min-h-[64px] items-center gap-3 rounded-2xl px-2 py-1 transition-colors hover:bg-white/8 active:bg-white/12 ${FOCUS_RING}`}
+        >
+          <span
+            aria-hidden
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] transition-transform duration-300 ease-out group-hover:scale-105"
+          >
+            <KittyFace size={36} />
+          </span>
+          <span className="min-w-0">
+            <span className="font-display block text-[30px] font-light leading-none tracking-[-0.01em] text-fg">
+              {SITE.name}
+            </span>
+            <span className="mt-1.5 block truncate text-[12.5px] leading-snug text-muted">
+              {home.onLanding ? "Back to the top of her story" : "Home: her story"}
+            </span>
+          </span>
+        </Link>
 
-        <nav aria-label="Site" className="mt-3 flex flex-col gap-1">
+        <p className="mt-6 px-4 text-[11px] font-medium uppercase tracking-[0.22em] text-accent">Menu</p>
+
+        <nav aria-label="Site" className="mt-2 flex flex-col gap-1">
           <DrawerRow
             href={SITE.nav.stories.href}
-            current={pathname === SITE.nav.stories.href}
+            current={inStories}
             onClick={onClose}
             glyph={<ArrowGlyph />}
           >
@@ -291,6 +372,14 @@ function Drawer({
             glyph={<ArrowGlyph />}
           >
             {SITE.nav.store.label}
+          </DrawerRow>
+          <DrawerRow
+            href={TRY_ON_HREF}
+            current={pathname === TRY_ON_HREF}
+            onClick={onClose}
+            glyph={<CameraGlyph size={20} />}
+          >
+            Try it on
           </DrawerRow>
           <DrawerRow
             href={SITE.nav.account.href}
@@ -313,16 +402,7 @@ function Drawer({
           </DrawerRow>
         </div>
 
-        <div className="mt-auto px-4 pt-10">
-          <Link
-            href="/"
-            onClick={onClose}
-            className={`font-display inline-block rounded-md text-[28px] font-light leading-none tracking-[-0.01em] text-fg ${FOCUS_RING}`}
-          >
-            {SITE.name}
-          </Link>
-          <p className="mt-2 text-[13px] leading-snug text-muted">{SITE.tagline}</p>
-        </div>
+        <p className="mt-auto px-4 pt-10 text-[13px] leading-snug text-muted">{SITE.tagline}</p>
       </div>
     </>
   );
@@ -341,11 +421,14 @@ function DrawerRow({
   glyph: ReactNode;
   children: ReactNode;
 }) {
-  const className = `group flex min-h-[60px] w-full items-center justify-between gap-4 rounded-2xl px-4 text-left transition-colors hover:bg-white/8 active:bg-white/12 ${FOCUS_RING} ${
-    current ? "bg-white/6" : ""
+  const className = `group relative flex min-h-[58px] w-full items-center justify-between gap-4 rounded-2xl px-4 text-left transition-colors hover:bg-white/8 active:bg-white/12 ${FOCUS_RING} ${
+    current ? "bg-white/[0.07]" : ""
   }`;
   const label = (
     <span className="font-display text-[26px] font-light leading-none tracking-[-0.01em]">
+      {current ? (
+        <span aria-hidden className="absolute left-1 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />
+      ) : null}
       {children}
     </span>
   );
@@ -476,9 +559,9 @@ function PressTint() {
   );
 }
 
-function CameraGlyph() {
+function CameraGlyph({ size = 24 }: { size?: number }) {
   return (
-    <svg aria-hidden width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <svg aria-hidden width={size} height={size} viewBox="0 0 24 24" fill="none">
       {/* rounded body */}
       <rect x="2.5" y="7" width="19" height="13" rx="3" stroke="currentColor" strokeWidth="1.6" />
       {/* viewfinder bump */}

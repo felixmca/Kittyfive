@@ -167,12 +167,17 @@ function loadViaImage(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
-/** Fetch and decode one frame. Rejects on HTTP errors and aborts. */
-export async function loadFrame(url: string, signal?: AbortSignal): Promise<FrameImage> {
+/** Fetch one frame's compressed bytes. Rejects on HTTP errors and aborts. */
+export async function fetchFrameBlob(url: string, signal?: AbortSignal): Promise<Blob> {
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`${res.status} ${url}`);
   const blob = await res.blob();
   if (signal?.aborted) throw abortError();
+  return blob;
+}
+
+/** Decode compressed bytes into something a canvas can draw. */
+export async function decodeFrameBlob(blob: Blob): Promise<FrameImage> {
   if (hasBitmap) {
     try {
       return await createImageBitmap(blob);
@@ -181,6 +186,12 @@ export async function loadFrame(url: string, signal?: AbortSignal): Promise<Fram
     }
   }
   return loadViaImage(blob);
+}
+
+/** Fetch and decode one frame. Rejects on HTTP errors and aborts. */
+export async function loadFrame(url: string, signal?: AbortSignal): Promise<FrameImage> {
+  const blob = await fetchFrameBlob(url, signal);
+  return decodeFrameBlob(blob);
 }
 
 /** Free a decoded frame. Bitmaps are closed; images are just dropped. */

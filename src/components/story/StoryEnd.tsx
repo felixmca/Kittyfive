@@ -1,9 +1,11 @@
 "use client";
 /**
  * StoryEnd — the closing section after the last scene: a kicker, the 360°
- * turntable, the two big destinations and a footer line. Full viewport tall,
- * everything centred, buttons stacked and thumb-sized (min 64px tall, up to
- * 420px wide). Safe-area aware; leaves the top-right clear for the menu.
+ * turntable, the two big destinations, "Try it on" and a footer line. Full
+ * viewport tall, everything centred, buttons stacked and thumb-sized (min
+ * 64px tall, up to 420px wide), all on one screen of a 667px-tall phone.
+ * Safe-area aware; leaves the top corners clear for the chrome. (The landing
+ * has no floating camera button: it would sit on these buttons.)
  */
 import Link from "next/link";
 import { SITE } from "@/config/site";
@@ -30,11 +32,11 @@ export default function StoryEnd() {
         {SITE.tagline}
       </h2>
 
-      <div className="mt-8">
+      <div className="mt-6">
         <Turntable />
       </div>
 
-      <nav aria-label="Where next" className="mt-10 flex w-[min(100%,420px)] flex-col gap-3">
+      <nav aria-label="Where next" className="mt-7 flex w-[min(100%,420px)] flex-col gap-3">
         <Link
           href={SITE.nav.stories.href}
           className={`glass ${BUTTON} text-fg`}
@@ -45,9 +47,20 @@ export default function StoryEnd() {
         <Link href={SITE.nav.store.href} className={`${BUTTON} bg-accent text-bg`}>
           {SITE.nav.store.label}
         </Link>
+        <Link
+          href="/try-on"
+          className="mx-auto mt-1 inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 text-[15px] text-fg/85 underline-offset-4 hover:text-fg hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <rect x="2.5" y="7" width="19" height="13" rx="3" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M8 7V5.6A1.6 1.6 0 0 1 9.6 4h4.8A1.6 1.6 0 0 1 16 5.6V7" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="12" cy="13.5" r="3.6" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          Try it on with your camera
+        </Link>
       </nav>
 
-      <p className="mt-12 text-center text-[12px] leading-relaxed text-muted">
+      <p className="mt-8 text-center text-[12px] leading-relaxed text-muted">
         Made next to Kitty, {SITE.places.now.name}, SE16 · 2026
       </p>
     </section>

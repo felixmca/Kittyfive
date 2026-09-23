@@ -3,9 +3,11 @@
  * Bottom sheet for the current product plus the prev/next arrows.
  *
  * The sheet always shows a compact row (name, price, method) that toggles the
- * full details: description, variant pills and the Buy button, which POSTs to
- * /api/checkout and follows the returned Stripe URL.
+ * full details: description, variant pills, the Buy button, which POSTs to
+ * /api/checkout and follows the returned Stripe URL, and "Try it on", which
+ * opens the camera try-on on the same product (productIndex is shared).
  */
+import Link from "next/link";
 import { useState } from "react";
 import { PRODUCTS, SHIPPING } from "@/config/products";
 import { useUi } from "@/lib/store";
@@ -182,6 +184,17 @@ export default function ProductPanel() {
           >
             {buying ? "One moment…" : `Buy · ${price}`}
           </button>
+          <Link
+            href="/try-on"
+            className="glass flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-medium text-fg transition-transform active:scale-[0.99]"
+          >
+            <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect x="2.5" y="7" width="19" height="13" rx="3" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M8 7V5.6A1.6 1.6 0 0 1 9.6 4h4.8A1.6 1.6 0 0 1 16 5.6V7" stroke="currentColor" strokeWidth="1.6" />
+              <circle cx="12" cy="13.5" r="3.6" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+            Try it on with your camera
+          </Link>
           <p className="text-center text-xs text-muted">
             UK shipping {formatPence(SHIPPING.ukPence)}, added at checkout.
           </p>

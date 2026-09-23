@@ -5,9 +5,12 @@
  * scene is client-only (ssr:false) because it touches window and canvas.
  */
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import Chrome from "@/components/chrome/Chrome";
+import { BELOW_CHROME } from "@/components/chrome/layout";
+import { SITE } from "@/config/site";
 import DemoBanner from "@/components/commerce/DemoBanner";
 import ChatDock from "@/components/chat/ChatDock";
 import ProductPanel, { ProductArrows } from "@/components/store/ProductPanel";
@@ -23,15 +26,37 @@ export default function StoreClient() {
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-bg text-fg">
       <DemoBanner />
-      <Chrome />
+      {/* The product panel has its own "Try it on"; a floating camera would sit on it. */}
+      <Chrome hideCamera />
 
       <div className="absolute inset-0">
         <StoreScene />
       </div>
 
-      <header className="pointer-events-none absolute left-4 top-[calc(env(safe-area-inset-top)+3.25rem)] z-10 max-w-[60%]">
-        <h1 className="font-display text-2xl leading-none">Kitty Store</h1>
-        <p className="mt-1 text-xs text-muted">Tap the arrows. Kitty will show you round.</p>
+      {/* A soft shade under the chrome row and the heading, so both read over a bright room. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-[190px] bg-gradient-to-b from-black/60 via-black/25 to-transparent"
+      />
+
+      <header
+        className="absolute left-4 z-10 max-w-[70%]"
+        // Below the chrome row (Kitty's home button, the demo pill, the menu).
+        style={{ top: BELOW_CHROME }}
+      >
+        <h1 className="font-display pointer-events-none text-2xl leading-none [text-shadow:0_1px_12px_rgba(0,0,0,0.55)]">
+          Kitty Store
+        </h1>
+        <p className="pointer-events-none mt-1 text-xs text-fg/80 [text-shadow:0_1px_8px_rgba(0,0,0,0.6)]">
+          Tap the arrows. Kitty will show you round.
+        </p>
+        <Link
+          href={SITE.nav.stories.href}
+          className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-full text-xs font-medium text-accent underline-offset-4 hover:underline"
+        >
+          Read her stories
+          <span aria-hidden>→</span>
+        </Link>
       </header>
 
       <ProductArrows />

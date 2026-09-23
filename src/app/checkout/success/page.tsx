@@ -7,6 +7,7 @@ import { isLive } from "@/lib/commerce/env";
 import { formatPence } from "@/lib/commerce/format";
 import type { OrderStatus, OrderSummary } from "@/lib/commerce/types";
 import DemoBanner from "@/components/commerce/DemoBanner";
+import Chrome from "@/components/chrome/Chrome";
 
 export const metadata: Metadata = {
   title: "Thank you",
@@ -57,6 +58,7 @@ export default async function CheckoutSuccessPage({ searchParams }: { searchPara
 
   return (
     <main className="relative flex min-h-dvh flex-col bg-bg px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,calc(env(safe-area-inset-top)+3.5rem))] text-fg">
+      <Chrome hideCamera />
       <DemoBanner />
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6">
         <header className="space-y-2">
