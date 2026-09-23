@@ -194,6 +194,12 @@ to render on phones and easier to make charming.
       prompt (23 Sep: `pet_personas`, `src/lib/persona.ts`; server-side
       refusal fallbacks on)
 - [ ] Performance: 60 fps on an iPhone 12, first render < 3 s on 4G
+      *(23 Sep, drawn room, measured in emulation: first frame 1.7 s on
+      emulated 4G, 2.3 s with the CPU slowed 4×; 98 draw calls, 15k
+      triangles, 60 fps on this PC. The resolution now drops from 1.75× towards
+      1× when frames run slow (drei PerformanceMonitor). `window.__storePerf()`
+      reports it all. Still to measure on a real iPhone 12, and again once the
+      Blender house replaces the drawn room)*
 
 ## Phase 4 · A more realistic try-on
 

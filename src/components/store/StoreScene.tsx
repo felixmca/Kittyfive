@@ -8,9 +8,9 @@
  * visitor flips it): <AmbienceClock/> eases the shared ambience record and
  * <Lights/> follows it, with the river window and the garden, every frame.
  */
-import { useEffect, useMemo, useRef, type ComponentRef } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import * as THREE from "three";
 import { useUi } from "@/lib/store";
 import { ambience, lerp } from "./ambience";
@@ -24,21 +24,44 @@ import { DOORWAY_CAMERA, spotFor } from "./spots";
 import { useStoreState } from "./storeState";
 
 const BG = "#0b0b0c";
+/** Sharpest the room is drawn (device pixels per CSS pixel), and the floor it may drop to. */
+const DPR_MAX = 1.75;
+const DPR_MIN = 1;
 const deg = THREE.MathUtils.degToRad;
 
 export default function StoreScene() {
   const reduced = useReducedMotion();
+  // Draw fewer pixels when a phone cannot keep up, and more again when it
+  // can; after a few swings either way it settles on the lowest. Not under
+  // automation: the verify harness's software-rendered WebKit is slow enough
+  // to trigger it, and headless WebKit stops showing any WebGL canvas after a
+  // resize (a bare page does the same), a failure no phone has.
+  const [adaptive] = useState(() => typeof navigator !== "undefined" && !navigator.webdriver);
+  const [dpr, setDpr] = useState(() =>
+    typeof window === "undefined" ? DPR_MAX : Math.max(DPR_MIN, Math.min(DPR_MAX, window.devicePixelRatio || 1)),
+  );
   return (
     <Canvas
       className="h-full w-full"
       style={{ touchAction: "none" }}
-      dpr={[1, 1.75]}
+      dpr={dpr}
       shadows={false}
       frameloop="always"
       gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
       camera={{ fov: 50, near: 0.05, far: 40, position: DOORWAY_CAMERA.position }}
       fallback={<ScenePlaceholder variant="unsupported" />}
     >
+      {adaptive ? (
+        <PerformanceMonitor
+          factor={1}
+          flipflops={3}
+          onChange={({ factor }) => {
+            const top = Math.min(DPR_MAX, window.devicePixelRatio || 1);
+            setDpr(Math.max(DPR_MIN, Math.round((DPR_MIN + (top - DPR_MIN) * factor) * 4) / 4));
+          }}
+          onFallback={() => setDpr(DPR_MIN)}
+        />
+      ) : null}
       <color attach="background" args={[BG]} />
       <fog attach="fog" args={[BG, 9, 22]} />
       <AmbienceClock reduced={reduced} />
@@ -53,6 +76,7 @@ export default function StoreScene() {
         <FloatingProduct />
       </SceneErrorBoundary>
       <CameraRig reduced={reduced} />
+      <PerfProbe />
     </Canvas>
   );
 }
@@ -73,6 +97,47 @@ function AmbienceClock({ reduced }: { reduced: boolean }) {
     if (!reduced) ambience.time += dt;
     const d = ambience.target - ambience.evening;
     ambience.evening = Math.abs(d) < 0.002 ? ambience.target : ambience.evening + d * (1 - Math.exp(-dt * 2.4));
+  });
+  return null;
+}
+
+/**
+ * For the verify harness and performance checks: window.__storePerf() says
+ * when the first frame was drawn (ms since navigation), recent frame times
+ * and what one frame costs the GPU (draw calls, triangles).
+ */
+function PerfProbe() {
+  const gl = useThree((s) => s.gl);
+  const perf = useRef({ first: 0, times: new Float32Array(240), n: 0, last: 0 });
+  useEffect(() => {
+    const w = window as Window & { __storePerf?: () => unknown };
+    w.__storePerf = () => {
+      const p = perf.current;
+      const count = Math.min(p.n, p.times.length);
+      const times = Array.from(p.times.slice(0, count)).sort((a, b) => a - b);
+      const at = (q: number) => (count ? Math.round(times[Math.min(count - 1, Math.floor(q * count))] * 10) / 10 : 0);
+      return {
+        firstFrameMs: Math.round(p.first),
+        frames: p.n,
+        medianMs: at(0.5),
+        p95Ms: at(0.95),
+        calls: gl.info.render.calls,
+        triangles: gl.info.render.triangles,
+        geometries: gl.info.memory.geometries,
+        textures: gl.info.memory.textures,
+        pixelRatio: gl.getPixelRatio(),
+      };
+    };
+    return () => {
+      delete w.__storePerf;
+    };
+  }, [gl]);
+  useFrame(() => {
+    const p = perf.current;
+    const now = performance.now();
+    if (!p.first) p.first = now;
+    else p.times[p.n++ % p.times.length] = now - p.last;
+    p.last = now;
   });
   return null;
 }
