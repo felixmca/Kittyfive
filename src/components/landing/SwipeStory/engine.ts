@@ -39,6 +39,7 @@ import {
   type OverlayEls,
 } from "./overlays";
 import { StagePainter, computeLayout, type StageLayout } from "./painter";
+import { StoryReport } from "./report";
 import { buildTimeline, canvasView, spanIndexAt, stopIndexAt, type Timeline } from "./timeline";
 
 export interface EngineEls extends OverlayEls {
@@ -96,6 +97,9 @@ export class SwipeEngine {
   private readonly reduced = prefersReducedMotion();
   private readonly media: StoryMedia;
   private readonly painter: StagePainter;
+  private readonly report: StoryReport;
+  /** The furthest stop reached this visit (-1: none), for the story report. */
+  private furthest = -1;
   private tl: Timeline | null = null;
   private layout: StageLayout;
   private layoutDirty = true;
@@ -136,6 +140,14 @@ export class SwipeEngine {
     this.media = new StoryMedia(chapters);
     this.painter = new StagePainter(els.canvas);
     this.layout = computeLayout(1, 1, 1, 1);
+    this.report = new StoryReport(this.reduced);
+    this.report.attach(() => ({
+      started: this.started,
+      mode: this.mode,
+      t: this.t,
+      furthest: this.furthest,
+      media: this.media.stats(),
+    }));
   }
 
   // ─── life cycle ───────────────────────────────────────────────────────────
@@ -162,6 +174,7 @@ export class SwipeEngine {
     window.clearTimeout(this.watchdog);
     this.cleanups.forEach((fn) => fn());
     this.cleanups = [];
+    this.report.destroy();
     this.media.destroy();
     this.setLocked(false);
   }
@@ -238,6 +251,7 @@ export class SwipeEngine {
 
   private begin(): void {
     this.started = true;
+    this.report.started(this.els.stage.dataset.splash === "true");
     window.clearTimeout(this.splashTimer);
     window.clearTimeout(this.watchdog);
     this.setSplash(false);
@@ -319,6 +333,7 @@ export class SwipeEngine {
     this.hurry = false;
     const k = stopIndexAt(tl, this.t);
     if (k >= 0) {
+      this.furthest = Math.max(this.furthest, k);
       this.announce(k);
       this.scheduleHint();
     }
@@ -363,6 +378,7 @@ export class SwipeEngine {
   forward(): void {
     const tl = this.tl;
     if (this.released) return;
+    this.report.swipe();
     if (!tl || !this.started) {
       // Still loading: bring the stage (its splash and Skip) up; chapter 1
       // starts full screen as soon as it can.
@@ -848,6 +864,7 @@ export class SwipeEngine {
       if (!this.drawFailed) {
         this.drawFailed = true;
         console.warn("[story] draw failed", err);
+        this.report.error(`draw: ${err instanceof Error ? err.message : String(err)}`, true);
       }
     }
   }

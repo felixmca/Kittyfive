@@ -114,6 +114,8 @@ export class StoryMedia {
   private wants: Want[] = [];
   private wanted: Set<number>[] = [];
   private decodingCount = 0;
+  /** Most frames decoded at once this visit (the story report sends it home). */
+  private peak = 0;
   private suspended = false;
   private destroyed = false;
 
@@ -331,6 +333,7 @@ export class StoryMedia {
           releaseFrame(img);
         } else {
           c.decoded.set(idx, img);
+          this.peak = Math.max(this.peak, this.decodedCount());
           this.emit();
         }
         this.pump();
@@ -420,20 +423,24 @@ export class StoryMedia {
     return n;
   }
 
-  /** For the verify harness: how much is decoded right now. */
-  stats(): { decoded: number; finals: number; fetched: number; broken: number; budget: Budget } {
-    let decoded = 0;
+  private decodedCount(): number {
+    let n = 0;
+    for (const c of this.chapters) n += c ? c.decoded.size : 0;
+    return n;
+  }
+
+  /** For the verify harness and the story report: how much is decoded now, and at most. */
+  stats(): { decoded: number; peak: number; finals: number; fetched: number; broken: number; budget: Budget } {
     let finals = 0;
     let fetched = 0;
     let broken = 0;
     for (const c of this.chapters) {
       if (!c) continue;
-      decoded += c.decoded.size;
       finals += c.final ? 1 : 0;
       fetched += c.blobs.filter(Boolean).length;
       broken += c.broken.size;
     }
-    return { decoded, finals, fetched, broken, budget: this.budget };
+    return { decoded: this.decodedCount(), peak: this.peak, finals, fetched, broken, budget: this.budget };
   }
 
   /** Something new was decoded. */
