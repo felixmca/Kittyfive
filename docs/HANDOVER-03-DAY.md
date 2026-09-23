@@ -335,3 +335,20 @@ they are ready the day there is a domain. Nothing has been sent to anyone.
 in Resend, then `RESEND_API_KEY` and `EMAIL_FROM` on Vercel. Until then the
 panel says sending is off and the buttons are disabled, so no chapter's one
 send is used up for nothing.
+
+### 14 · When the phone's signal drops, and other small things
+
+- **The landing survives a script that never arrives.** On a weak signal, one
+  missing script used to blank the whole landing: the 3D camera's library
+  (the biggest script on the page) was tied to the hero, and a failure there
+  took the story down with it. Now the camera loads on its own; without it
+  you get the drawn camera, the wordmark and the story as normal. Tested by
+  blocking it.
+- **Error and "not found" pages** in Kitty's words ("Something fell off the
+  shelf." / "Kitty looked everywhere. It isn't here."), with Try again and
+  the way home, instead of the framework's bare text.
+- **Signing in brings you back.** "Sign in to get them" on /stories returns
+  you to /stories once you are in (only ever to a page on this site).
+- **The self-hosting guide** for Phase 7 is written ([SELF-HOSTING.md](SELF-HOSTING.md)),
+  and `.env.example` now names the Supabase key the code actually reads.
+
