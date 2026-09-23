@@ -88,7 +88,13 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
       if (!entry || chaptersRef.current[entry.chapterId] || loading.current.has(entry.chapterId)) return;
       loading.current.add(entry.chapterId);
       try {
-        const chapter = await storiesBackend().loadChapter(pet.slug, entry.chapterId);
+        // A request that hangs (a phone losing signal) must not block this
+        // chapter for good: after 15 s it counts as failed and the next
+        // scroll asks again.
+        const chapter = await Promise.race([
+          storiesBackend().loadChapter(pet.slug, entry.chapterId),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), 15_000)),
+        ]);
         if (chapter) setChapters((c) => ({ ...c, [chapter.id]: chapter }));
       } catch (e) {
         console.warn("[reader] could not load chapter", entry.slug, e);
@@ -234,7 +240,11 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
           if (!chapter) return null;
           return <ChapterBlock key={r.chapterId} entry={r} chapter={chapter} registry={registry} />;
         })}
-        {range.end === reading.length - 1 ? <TheEnd petName={pet.name} petId={pet.id} /> : <Loading />}
+        {range.end === reading.length - 1 ? (
+          <TheEnd petName={pet.name} petId={pet.id} />
+        ) : (
+          <Loading next={reading[range.end + 1]} />
+        )}
       </main>
     </>
   );
@@ -318,10 +328,25 @@ function CameraRoll({ dir }: { dir: string | null }) {
   );
 }
 
-function Loading() {
+/** Before the next chapter arrives; if it takes long (a weak signal), a way to open it directly. */
+function Loading({ next }: { next?: ReadingEntry }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    const t = window.setTimeout(() => setSlow(true), 10_000);
+    return () => window.clearTimeout(t);
+  }, [next?.slug]);
   return (
-    <div className="flex h-[60dvh] items-center justify-center" aria-hidden>
-      <span className="h-1.5 w-1.5 animate-ping rounded-full bg-white/40" />
+    <div className="flex h-[60dvh] flex-col items-center justify-center gap-5" data-reader-loading>
+      <span aria-hidden className="h-1.5 w-1.5 animate-ping rounded-full bg-white/40" />
+      {slow && next ? (
+        <Link
+          href={`/stories/${next.slug}`}
+          className="text-[15px] text-muted underline-offset-4 hover:text-fg hover:underline"
+        >
+          Taking a while. Open &ldquo;{next.title}&rdquo;
+        </Link>
+      ) : null}
     </div>
   );
 }
