@@ -83,6 +83,12 @@ const SPLASH_AFTER_MS = 400;
 const CHAT_WAIT_MS = 3000;
 /** After this, start with whatever has arrived; playback waits for the rest frame by frame. */
 const START_ANYWAY_MS = 7000;
+/**
+ * Playing on waits for the next frame, but not for ever: after this long the
+ * story moves on with the nearest frame it has (a frame lost to a weak signal
+ * is retried in the background and would otherwise hold it for ~45 s).
+ */
+const FRAME_PATIENCE_MS = 2500;
 const RATE = { forward: 1, hurry: 2.2, back: 2.5 };
 const SCROLL_MS = { engage: 650, release: 900 };
 
@@ -129,6 +135,10 @@ export class SwipeEngine {
   /** Which way the last scrub went, so the decode window leads that way. */
   private scrubDir = 1;
   private drawFailed = false;
+  /** When playback started waiting for a frame (0: not waiting). */
+  private waitingSince = 0;
+  /** After patience runs out, play on without waiting until then (past the gap). */
+  private freeUntil = 0;
   private announced = -1;
   private destroyed = false;
   private cleanups: (() => void)[] = [];
@@ -313,11 +323,21 @@ export class SwipeEngine {
       const rate = dir > 0 ? (this.hurry ? RATE.hurry : RATE.forward) : RATE.back * (this.hurry ? 1.6 : 1);
       const next = this.t + dir * rate * dt;
       if (dir === 0 || (dir > 0 ? next >= this.target : next <= this.target)) {
+        this.waitingSince = 0;
         this.t = this.target;
         this.arrive();
-      } else if (dir > 0 && !this.frameReady(next)) {
-        again = true; // wait for the frame rather than show the wrong one
+      } else if (dir > 0 && now >= this.freeUntil && !this.frameReady(next)) {
+        // Wait for the frame rather than show the wrong one, for a while; then
+        // play on for a second with the nearest frames there are.
+        if (!this.waitingSince) this.waitingSince = now;
+        else if (now - this.waitingSince >= FRAME_PATIENCE_MS) {
+          this.waitingSince = 0;
+          this.freeUntil = now + 1000;
+          this.t = next;
+        }
+        again = true;
       } else {
+        this.waitingSince = 0;
         this.t = next;
         again = true;
       }

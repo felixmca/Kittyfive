@@ -276,13 +276,18 @@ export class StoryMedia {
   /** Lower goes first: the playing chapter in playing order, then the next chapter from its start. */
   private fetchPriority(ch: number, idx: number): number {
     const { chapter, pos, dir, next } = this.focusNow;
-    const n = this.chapters[ch]?.clip.frames ?? 0;
+    const c = this.chapters[ch];
+    const n = c?.clip.frames ?? 0;
+    // A frame that has already failed goes behind the fresh ones, or a few
+    // dead requests near the playhead would take every download slot again
+    // and again (a weak signal) while the rest of the clip waits.
+    const retry = c ? c.fetchTries[idx] * 10 * n : 0;
     if (ch === chapter) {
       const d = (idx - pos) * dir;
-      return d >= 0 ? d : n + -d;
+      return retry + (d >= 0 ? d : n + -d);
     }
-    if (ch === next) return 3 * n + (dir > 0 ? idx : n - 1 - idx);
-    return 6 * n + idx;
+    if (ch === next) return retry + 3 * n + (dir > 0 ? idx : n - 1 - idx);
+    return retry + 6 * n + idx;
   }
 
   private fetchOne(ch: number, idx: number): void {

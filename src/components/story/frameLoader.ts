@@ -172,13 +172,40 @@ function loadViaImage(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
-/** Fetch one frame's compressed bytes. Rejects on HTTP errors and aborts. */
+/**
+ * A frame that has not arrived by then is given up on (and retried by the
+ * caller): on a phone losing signal a request can hang for minutes, and six
+ * hung requests would hold every download slot, stopping the story.
+ */
+const FRAME_TIMEOUT_MS = 15_000;
+
+/** Fetch one frame's compressed bytes. Rejects on HTTP errors, aborts and timeouts. */
 export async function fetchFrameBlob(url: string, signal?: AbortSignal): Promise<Blob> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  const blob = await res.blob();
   if (signal?.aborted) throw abortError();
-  return blob;
+  // The caller's signal and our timeout, combined by hand (AbortSignal.any is
+  // too new for some iPhones).
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, FRAME_TIMEOUT_MS);
+  const onAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    const blob = await res.blob();
+    if (signal?.aborted) throw abortError();
+    return blob;
+  } catch (err) {
+    // A timeout is an ordinary failure (the caller retries), not the caller's abort.
+    if (timedOut) throw new Error(`timed out ${url}`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
 // ─── decoding off the main thread ────────────────────────────────────────────
