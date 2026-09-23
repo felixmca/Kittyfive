@@ -213,8 +213,25 @@ export class SwipeEngine {
       if (this.readyToStart()) this.begin();
       return;
     }
+    this.maybeLoadKittens();
     this.kick();
   };
+
+  private kittensRequested = false;
+
+  /**
+   * The kitten photos (chapter 2) only once chapter 1's frames are all here or
+   * it has come to rest, so they never compete with the chapter playing now.
+   */
+  private maybeLoadKittens(): void {
+    if (this.kittensRequested || !this.tl) return;
+    const clip = this.tl.spans[0].clip;
+    if (clip && this.furthest < 0 && this.media.fetchedPrefix(0) < clip.frames) return;
+    this.kittensRequested = true;
+    this.els.kittenImages.forEach((img) => {
+      if (!img.getAttribute("src") && img.dataset.src) img.src = img.dataset.src;
+    });
+  }
 
   private readyToStart(): boolean {
     const tl = this.tl!;
@@ -229,13 +246,16 @@ export class SwipeEngine {
     if (this.media.decodedPrefix(0) < Math.min(n, 4)) return false;
     const have = this.media.fetchedPrefix(0);
     if (have >= n) return true;
-    if (have < Math.min(n, 24)) return false;
-    // Start early only if the rest will arrive before playback needs it.
+    // A dozen frames first: enough to measure the connection, and a buffer.
+    if (have < Math.min(n, 12)) return false;
+    // Then start as soon as no frame will be late: frame k is needed k/n of
+    // the way through the clip, so the last one is the tightest. With the rest
+    // arriving faster than the clip plays (a normal 4G phone), that is now.
     if (!this.firstFrameAt) return false;
     const elapsed = (performance.now() - this.firstFrameAt) / 1000;
     const rate = have / Math.max(0.05, elapsed);
     const playback = first.clipEnd - first.clipStart;
-    return (n - have) / rate < (have / n) * playback * 0.8;
+    return (n - have) / rate <= playback * 0.85;
   }
 
   private updateSplash(): void {
@@ -257,10 +277,6 @@ export class SwipeEngine {
     this.setSplash(false);
     const tl = this.tl!;
     this.els.stage.dataset.ready = "true";
-    // The kitten photos only once chapter 1 is safely playing.
-    this.els.kittenImages.forEach((img) => {
-      if (!img.getAttribute("src") && img.dataset.src) img.src = img.dataset.src;
-    });
     if (this.released) {
       this.t = tl.end;
       this.target = null;
@@ -337,6 +353,7 @@ export class SwipeEngine {
       this.announce(k);
       this.scheduleHint();
     }
+    this.maybeLoadKittens();
     this.updateResidency();
   }
 
