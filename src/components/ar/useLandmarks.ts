@@ -98,6 +98,7 @@ export function useLandmarks(
     let lastVideoTime = -1;
     let misses = 0;
     let errors = 0;
+    let masksOk = true;
 
     const tick = (now: number) => {
       if (cancelled || !landmarker) return;
@@ -115,10 +116,22 @@ export function useLandmarks(
       try {
         const result = landmarker.detectForVideo(video, t0);
         poses = result.landmarks;
-        if (segmentation) {
-          const m = result.segmentationMasks?.[0];
-          if (m) copyMask(m, t0);
+        if (segmentation && masksOk) {
+          // The silhouette fails on its own: a phone that cannot read it back
+          // loses the trim, never the body tracking.
+          try {
+            const m = result.segmentationMasks?.[0];
+            if (m) copyMask(m, t0);
+          } catch (err) {
+            masksOk = false;
+            mask.current = null;
+            console.warn("[ar] silhouette unavailable; garments are not trimmed", err);
+          }
+        }
+        try {
           result.segmentationMasks?.forEach((x) => x.close());
+        } catch {
+          /* already released */
         }
       } catch (err) {
         errors += 1;

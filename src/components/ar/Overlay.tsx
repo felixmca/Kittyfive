@@ -70,6 +70,7 @@ export default function Overlay({
     const garment = fitted && product.anchor !== "head" ? new FittedGarment() : null;
     let forced: Landmarks | null | undefined;
     let lastFitted = false;
+    let garmentFailures = 0;
     const w = window as FitWindow;
     if (garment) {
       w.__fit = {
@@ -133,17 +134,23 @@ export default function Overlay({
       }
       try {
         lastFitted = false;
-        if (garment && pose && !img) {
+        if (garment && garmentFailures < 3 && pose && !img) {
           const m = mask?.current;
-          lastFitted = garment.draw(ctx, pose, product, colour, {
-            cw,
-            ch,
-            dpr,
-            mirrored,
-            video: forced !== undefined ? null : video,
-            // A silhouette older than half a second is somebody else's pose.
-            mask: m && performance.now() - m.at < 500 ? m.canvas : null,
-          });
+          try {
+            lastFitted = garment.draw(ctx, pose, product, colour, {
+              cw,
+              ch,
+              dpr,
+              mirrored,
+              video: forced !== undefined ? null : video,
+              // A silhouette older than half a second is somebody else's pose.
+              mask: m && performance.now() - m.at < 500 ? m.canvas : null,
+            });
+          } catch (err) {
+            // A browser that cannot do the fitted drawing gets the flat garment.
+            garmentFailures++;
+            if (garmentFailures === 3) console.warn("[ar] fitted garment off; the flat one stays", err);
+          }
         }
         if (!lastFitted) drawProduct(ctx, product, colour, place, img, { mirrored, dpr });
       } catch (err) {
