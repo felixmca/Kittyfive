@@ -385,8 +385,10 @@ send is used up for nothing.
   never arrive (tested by making six of chapter 1's frames hang), it used to
   wait at that spot forever; now each download gives up after 15 s and is
   retried behind the others, and playback waits at most 2.5 s before
-  playing on past the gap. Same idea in the store's chat: a reply that stops
-  arriving ends after 25 s, keeping whatever Kitty had already said.
+  playing on past the gap. Same idea in the store's chat (a reply that stops
+  arriving ends after 25 s, keeping whatever Kitty had already said) and in
+  the chapter reader (a chapter that will not load is asked for again, and
+  after 10 s there is a link to open it directly).
 
 ### 16 · Small additions
 
