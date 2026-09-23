@@ -211,9 +211,17 @@ export default function ChapterReader({ pet, reading, startIndex, initialChapter
           style={{ top: CHROME_TOP, left: CLEAR_OF_HOME, maxWidth: "calc(100vw - 132px)" }}
           data-reader-position
         >
-          <span className="truncate rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-fg/85 backdrop-blur-md">
-            {`Vol ${entry.volumeNumber} · ${entry.volumeTitle}`}
-          </span>
+          {/* Where you are, and the way back to the whole book at this volume. */}
+          <Link
+            href={`/stories#volume-${entry.volumeSlug}`}
+            aria-label={`Volume ${entry.volumeNumber}, ${entry.volumeTitle}: back to all the volumes`}
+            className="pointer-events-auto flex min-h-9 min-w-0 items-center gap-1.5 rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-fg/85 backdrop-blur-md transition-colors hover:border-white/35 hover:text-fg"
+          >
+            <svg aria-hidden width="12" height="12" viewBox="0 0 12 12" className="shrink-0 opacity-80">
+              <path d="M7.5 2.5L4 6l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="truncate">{`Vol ${entry.volumeNumber} · ${entry.volumeTitle}`}</span>
+          </Link>
         </div>
       ) : null}
       <main data-reader>

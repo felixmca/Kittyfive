@@ -8,6 +8,12 @@
  * in a straight line at WALK_SPEED (with a small hop when the spot is higher,
  * e.g. the kitchen counter), turns to the spot's facing yaw, sits, and the
  * speech bubble shows the product's pitch.
+ *
+ * Left alone for a while (no product change, chat closed), she wanders off
+ * like a cat: to the window, then the garden door, then the rug, one at a
+ * time. She sits there, says something about it (storeState.poiLine), and
+ * walks back to the product she was showing. Any tap on the arrows brings
+ * her straight to the new product. Never under reduced motion.
  */
 import { Suspense, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -19,19 +25,36 @@ import SceneErrorBoundary from "./SceneErrorBoundary";
 import SpeechBubble from "./SpeechBubble";
 import { useAssetExists } from "./useAssetExists";
 import { angleDelta, createMotion, prefersReducedMotion, type KittyMotion } from "./motion";
-import { SPOTS, TURN_SPEED, WALK_SPEED, spotFor, type Spot } from "./spots";
+import { POINTS_OF_INTEREST, SPOTS, TURN_SPEED, WALK_SPEED, spotFor, type Vec3 } from "./spots";
 import { useStoreState } from "./storeState";
 
 const KITTY_GLB = "/models/kitty.glb";
 
+/** Seconds at a product before she wanders off, and seconds she spends looking. */
+const WANDER_AFTER = 16;
+const WANDER_STAY = 7;
+
 type Mode = "idle" | "turning" | "walking" | "settling";
+
+/** Where she is going: a product spot, or a point of interest (index null). */
+interface Goal {
+  position: Vec3;
+  yaw: number;
+}
 
 interface Walker {
   pos: THREE.Vector3;
   yaw: number;
   mode: Mode;
-  target: Spot;
+  target: Goal;
+  /** The product spot she belongs to (she returns there after wandering). */
   targetIndex: number;
+  /** The point of interest she is at or heading to, or -1. */
+  poi: number;
+  /** Seconds idle at the current goal. */
+  idle: number;
+  /** Which point of interest is next. */
+  nextPoi: number;
   start: THREE.Vector3;
   totalDist: number;
   hop: number;
@@ -45,6 +68,7 @@ export default function Kitty() {
   const goal = useMemo(() => new THREE.Vector3(), []);
 
   const walker = useRef<Walker | null>(null);
+  const reduced = useRef(prefersReducedMotion());
   if (walker.current === null) {
     const i = useUi.getState().productIndex;
     const spot = spotFor(i);
@@ -54,6 +78,9 @@ export default function Kitty() {
       mode: "idle",
       target: spot,
       targetIndex: i,
+      poi: -1,
+      idle: 0,
+      nextPoi: 0,
       start: new THREE.Vector3(...spot.position),
       totalDist: 0,
       hop: 0,
@@ -73,6 +100,10 @@ export default function Kitty() {
     if (spot === w.target && w.mode === "idle") return;
     w.target = spot;
     w.targetIndex = productIndex;
+    w.poi = -1;
+    w.idle = 0;
+    useStoreState.getState().setPoiLine(null);
+    useStoreState.getState().setWanderTo(null);
     if (prefersReducedMotion()) {
       w.pos.set(...spot.position);
       w.yaw = spot.yaw;
@@ -134,9 +165,29 @@ export default function Kitty() {
       if (Math.abs(d) <= step) {
         w.yaw = w.target.yaw;
         w.mode = "idle";
-        useStoreState.getState().noteArrival(w.targetIndex);
+        w.idle = 0;
+        if (w.poi >= 0) useStoreState.getState().setPoiLine(POINTS_OF_INTEREST[w.poi].line);
+        else useStoreState.getState().noteArrival(w.targetIndex);
       } else {
         w.yaw += Math.sign(d) * step;
+      }
+    } else if (w.mode === "idle" && !reduced.current) {
+      // A cat left alone wanders off, has a look at something, and comes back.
+      w.idle += dt;
+      const busy = useUi.getState().chatOpen || useStoreState.getState().panelOpen;
+      if (w.poi >= 0 && w.idle > WANDER_STAY) {
+        w.poi = -1;
+        w.target = spotFor(w.targetIndex);
+        w.mode = "turning";
+        useStoreState.getState().setPoiLine(null);
+        useStoreState.getState().setWanderTo(null);
+      } else if (w.poi < 0 && w.idle > WANDER_AFTER && !busy) {
+        w.poi = w.nextPoi;
+        w.nextPoi = (w.nextPoi + 1) % POINTS_OF_INTEREST.length;
+        w.target = POINTS_OF_INTEREST[w.poi];
+        w.mode = "turning";
+        useStoreState.getState().setArrivedIndex(null);
+        useStoreState.getState().setWanderTo(POINTS_OF_INTEREST[w.poi].position);
       }
     }
 

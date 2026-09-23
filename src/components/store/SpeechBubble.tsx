@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import { Html } from "@react-three/drei";
+import * as THREE from "three";
 import { KITTY } from "@/config/kitty";
 import { PRODUCTS } from "@/config/products";
 import { SITE } from "@/config/site";
@@ -15,10 +16,26 @@ import { useStoreState } from "./storeState";
 import { wrapIndex } from "./spots";
 
 const OPENING_MS = 5200;
+/** Half the bubble's widest (220px) plus a margin: its centre never comes closer to an edge. */
+const EDGE = 122;
+const scratch = new THREE.Vector3();
+
+/**
+ * Above her head, like drei's default, but kept on screen: near the left or
+ * right edge of a phone the bubble slides inwards instead of being cut off.
+ */
+function onScreen(el: THREE.Object3D, camera: THREE.Camera, size: { width: number; height: number }): number[] {
+  const p = scratch.setFromMatrixPosition(el.matrixWorld).project(camera);
+  const x = (p.x * size.width) / 2 + size.width / 2;
+  const y = (-p.y * size.height) / 2 + size.height / 2;
+  const lo = Math.min(EDGE, size.width / 2);
+  return [Math.min(size.width - lo, Math.max(lo, x)), y];
+}
 
 export default function SpeechBubble() {
   const arrivedIndex = useStoreState((s) => s.arrivedIndex);
   const arrivals = useStoreState((s) => s.arrivals);
+  const poiLine = useStoreState((s) => s.poiLine);
   const [openingDone, setOpeningDone] = useState(false);
   const opening = useOpeningLine(SITE.petSlug);
 
@@ -30,8 +47,9 @@ export default function SpeechBubble() {
     return () => clearTimeout(t);
   }, [arrivals, openingDone]);
 
-  const text =
-    arrivedIndex === null
+  const text = poiLine
+    ? poiLine
+    : arrivedIndex === null
       ? null
       : arrivals === 0 && !openingDone
         ? opening
@@ -46,7 +64,14 @@ export default function SpeechBubble() {
   const visible = text !== null;
 
   return (
-    <Html position={[0, 0.66, 0]} center zIndexRange={[10, 0]} pointerEvents="none" style={{ pointerEvents: "none" }}>
+    <Html
+      position={[0, 0.66, 0]}
+      center
+      calculatePosition={onScreen}
+      zIndexRange={[10, 0]}
+      pointerEvents="none"
+      style={{ pointerEvents: "none" }}
+    >
       <div
         role="status"
         aria-live="polite"

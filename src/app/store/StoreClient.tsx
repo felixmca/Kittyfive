@@ -13,6 +13,7 @@ import { BELOW_CHROME } from "@/components/chrome/layout";
 import { SITE } from "@/config/site";
 import DemoBanner from "@/components/commerce/DemoBanner";
 import ChatDock from "@/components/chat/ChatDock";
+import LightToggle from "@/components/store/LightToggle";
 import ProductPanel, { ProductArrows } from "@/components/store/ProductPanel";
 import ScenePlaceholder from "@/components/store/ScenePlaceholder";
 import { useUi } from "@/lib/store";
@@ -36,7 +37,7 @@ export default function StoreClient() {
       {/* A soft shade under the chrome row and the heading, so both read over a bright room. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-[190px] bg-gradient-to-b from-black/60 via-black/25 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-[240px] bg-gradient-to-b from-black/65 via-black/35 to-transparent"
       />
 
       <header
@@ -59,6 +60,7 @@ export default function StoreClient() {
         </Link>
       </header>
 
+      <LightToggle />
       <ProductArrows />
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">

@@ -90,6 +90,7 @@ export interface ReadingEntry {
   slug: string;
   title: string;
   volumeId: string;
+  volumeSlug: string;
   volumeTitle: string;
   /** 1-based. */
   volumeNumber: number;
@@ -129,6 +130,7 @@ export function readingOrder(volumes: VolumeWithChapters[]): ReadingEntry[] {
         slug: chapter.slug,
         title: chapter.title,
         volumeId: volume.id,
+        volumeSlug: volume.slug,
         volumeTitle: volume.title,
         volumeNumber: vi + 1,
         chapterNumber: ci + 1,

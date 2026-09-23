@@ -180,8 +180,14 @@ to render on phones and easier to make charming.
 - [ ] Kitty: Quaternius CC0 cat retextured as a tuxedo from `kitty-identity/`,
       Walk / Idle / Sit / Jump clips
 - [ ] The tour: Kitty walks sofa → window → counter → garden; camera follows;
-      river and plants animate; day/evening light
-- [ ] Products at spots in the house; product panel and Buy (demo checkout)
+      river and plants animate; day/evening light *(23 Sep, on the drawn room:
+      the river window and the garden beyond a glass door with Kitty's cat flap
+      are animated shaders and swaying plants; day/evening follows London time
+      with a sun/moon toggle; left alone, Kitty wanders to the window, the
+      garden door and the rug, says a line and comes back. Still to do: the
+      camera following her, and all of it on the Blender house)*
+- [x] Products at spots in the house; product panel and Buy (demo checkout);
+      "Try it on" in the panel (re-place the spots once the Blender house exists)
 - [x] Chat with Kitty on the real API key; **Kitty Tunables** on `/admin`
       (warmth, dryness, snack obsession, merch pushiness, story references,
       length, opening line, extra notes, model effort) compiled into her system

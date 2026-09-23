@@ -176,8 +176,105 @@ export async function fetchFrameBlob(url: string, signal?: AbortSignal): Promise
   return blob;
 }
 
-/** Decode compressed bytes into something a canvas can draw. */
+// ─── decoding off the main thread ────────────────────────────────────────────
+//
+// Safari decodes createImageBitmap(blob) on the main thread (measured: a
+// 576×1024 WebP held it for ~30–45 ms per frame in WebKit), which shows as
+// jank while the story plays and decodes ahead. A worker does the same decode
+// off the main thread and hands the bitmap back without a copy. Two workers,
+// made from an inline script (no bundler setup). Any failure (no Worker, no
+// createImageBitmap in workers, a decode error) falls back to the main thread,
+// and after a few failures the workers are not used again.
+
+const WORKER_SOURCE = `
+self.onmessage = async (e) => {
+  const { id, blob } = e.data;
+  try {
+    const bitmap = await createImageBitmap(blob);
+    self.postMessage({ id, bitmap }, [bitmap]);
+  } catch (err) {
+    self.postMessage({ id, error: String(err && err.message || err) });
+  }
+};`;
+
+interface DecodeWorker {
+  worker: Worker;
+  busy: number;
+}
+
+let workers: DecodeWorker[] | null = null;
+let workerFailures = 0;
+let nextJob = 0;
+const workerJobs = new Map<number, { resolve: (b: ImageBitmap) => void; reject: (e: Error) => void }>();
+
+function decodeWorkers(): DecodeWorker[] | null {
+  if (workers !== null) return workers.length ? workers : null;
+  workers = [];
+  if (typeof Worker === "undefined" || !hasBitmap || typeof URL === "undefined") return null;
+  try {
+    const url = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: "text/javascript" }));
+    const count = Math.max(1, Math.min(2, (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 2));
+    for (let i = 0; i < count; i++) {
+      const worker = new Worker(url);
+      const entry: DecodeWorker = { worker, busy: 0 };
+      worker.onmessage = (e: MessageEvent<{ id: number; bitmap?: ImageBitmap; error?: string }>) => {
+        entry.busy--;
+        const job = workerJobs.get(e.data.id);
+        workerJobs.delete(e.data.id);
+        if (!job) {
+          e.data.bitmap?.close();
+          return;
+        }
+        if (e.data.bitmap) job.resolve(e.data.bitmap);
+        else job.reject(new Error(e.data.error ?? "worker decode failed"));
+      };
+      worker.onerror = () => {
+        // A worker that cannot run at all: stop using workers, and let every
+        // job still waiting fall back to the main thread.
+        workerFailures = 99;
+        for (const [id, job] of workerJobs) {
+          workerJobs.delete(id);
+          job.reject(new Error("decode worker failed"));
+        }
+      };
+      workers.push(entry);
+    }
+  } catch {
+    workers = [];
+    return null;
+  }
+  return workers.length ? workers : null;
+}
+
+function decodeInWorker(blob: Blob): Promise<ImageBitmap> | null {
+  if (workerFailures >= 3) return null;
+  const pool = decodeWorkers();
+  if (!pool) return null;
+  const entry = pool.reduce((a, b) => (b.busy < a.busy ? b : a));
+  const id = ++nextJob;
+  return new Promise<ImageBitmap>((resolve, reject) => {
+    workerJobs.set(id, { resolve, reject });
+    entry.busy++;
+    try {
+      entry.worker.postMessage({ id, blob });
+    } catch (err) {
+      entry.busy--;
+      workerJobs.delete(id);
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+/** Decode compressed bytes into something a canvas can draw (in a worker when the browser allows). */
 export async function decodeFrameBlob(blob: Blob): Promise<FrameImage> {
+  const job = decodeInWorker(blob);
+  if (job) {
+    try {
+      return await job;
+    } catch {
+      workerFailures++;
+    }
+  }
   if (hasBitmap) {
     try {
       return await createImageBitmap(blob);

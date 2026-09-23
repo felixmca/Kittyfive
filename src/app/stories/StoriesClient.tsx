@@ -463,7 +463,7 @@ function VolumeSection({
   );
 
   return (
-    <section aria-labelledby={headingId} data-volume={volume.slug}>
+    <section aria-labelledby={headingId} data-volume={volume.slug} id={`volume-${volume.slug}`} className="scroll-mt-24">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 max-w-[62ch]">
           <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">

@@ -117,3 +117,33 @@ pictures. [Handover 04](HANDOVER-04-STORE-PHOTOS.md) is the shot list: the
 living room, the garden, rough measurements, Kitty's markings (so the 3D cat
 is really her) and a turntable video (the "spin Kitty" circle at the end of
 the landing is still a drawing). The folders have READMEs.
+
+### 6 · The store comes alive (on the drawn room, until the Blender house)
+
+- **Day and evening.** The store opens as it is at Kitty's in London (evening
+  from 7pm), and a sun/moon button under the menu flips it. Lights, lamps and
+  colours fade between the two over about a second.
+- **The river in the window** is now a small shader: the far bank as a row of
+  buildings, and water with light moving on it. At dusk the sky turns amber
+  and indigo, windows light up across the river, and their reflections
+  shimmer on the water.
+- **A garden door** in the back wall (glass, with Kitty's cat flap) looks onto
+  a lawn with beds of plants swaying in the breeze, a blossom tree, pots, a
+  low wall, and the Thames beyond it.
+- **Kitty wanders.** Left alone for a while, she walks to the window ("The
+  river. I keep an eye on it."), later the garden door, then her bit of rug,
+  sits there for a moment, and comes back to the product she was showing. A
+  tap on the arrows brings her straight back. (Not under reduced motion.)
+- Her speech bubble no longer runs off the edge of a phone screen.
+- `npm run verify` checks the toggle really changes the light and the bubble
+  stays on screen.
+
+### 7 · Smoother story on iPhone: frames decode in the background
+
+Measured in WebKit (Safari's engine), turning a story frame into a picture
+held the main thread for ~30–45 ms each time, so with the new small window of
+frames the story could stutter or slow while it decoded ahead. Chrome does
+this in the background; Safari does not. Frames are now decoded in two small
+background workers (tested: WebKit supports it; the main thread's longest
+pause dropped from 46 ms to 17 ms). If a browser cannot, it quietly uses the
+old way.

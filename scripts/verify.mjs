@@ -300,13 +300,29 @@ async function journeyLanding(browser, viewport) {
     record(viewport.name, route, "no loading splash once started", splash === "false", `data-splash=${splash}`);
     const s0 = await storyState(page);
     const sigs = new Set();
-    if (s0 && s0.target !== null) {
+    // Watch it play if there is time left before stop 1 (the last ~0.4 s holds
+    // the final frame); a fast start can be nearly done by now, so then park
+    // the playhead at two moments of the clip and compare what is drawn.
+    const live = s0 && s0.target !== null && s0.t < s0.stops[0] - 1.8;
+    if (live) {
       for (let i = 0; i < 6; i++) {
         sigs.add(await storySig(page));
         await page.waitForTimeout(220);
       }
+      record(viewport.name, route, "chapter 1 plays (frames change)", sigs.size >= 3, `${sigs.size} distinct frames in 1.3 s from t=${s0.t.toFixed(2)}`);
+    } else {
+      await waitRest(page);
+      const at = async (t) => {
+        await page.evaluate((t) => window.__swipeStory.debugSeek(t), t);
+        await page.waitForTimeout(700);
+        return storySig(page);
+      };
+      const a = await at(1.0);
+      const b = await at(3.0);
+      await page.evaluate((t) => window.__swipeStory.debugSeek(t), s0.stops[0]);
+      await page.waitForTimeout(300);
+      record(viewport.name, route, "chapter 1 plays (frames change)", a !== b, `seeked: t=1.0 vs t=3.0 ${a === b ? "identical" : "differ"} (started at t=${s0?.t.toFixed(2)})`);
     }
-    record(viewport.name, route, "chapter 1 plays (frames change)", sigs.size >= 3 || (s0 && s0.target === null), `${sigs.size} distinct frames in 1.3 s`);
     await page.screenshot({ path: join(OUT, `landing-${viewport.name}-01-chapter1.png`) });
     const rested = await waitRest(page);
     const s1 = await storyState(page);
@@ -545,6 +561,41 @@ async function journeyStore(browser, viewport) {
 
     const menu = await hitTest(page, 'button[aria-label="Open menu"]');
     record(viewport.name, route, "menu button reachable over the scene", menu.ok, menu.detail);
+
+    // Her speech bubble stays on screen (it used to be cut off at a phone's edge).
+    await page.click('button[aria-label="Close chat"]').catch(() => {});
+    await page.waitForTimeout(300);
+    const bubble = await page.evaluate(() => {
+      const el = Array.from(document.querySelectorAll("canvas ~ div [role='status'], [role='status']")).find((e) =>
+        e.querySelector(".font-display"),
+      );
+      const r = el?.getBoundingClientRect();
+      return r ? { left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth } : null;
+    });
+    record(viewport.name, route, "speech bubble inside the screen", !!bubble && bubble.left >= 0 && bubble.right <= bubble.vw, bubble ? `${bubble.left}–${bubble.right} of ${bubble.vw}` : "not found");
+
+    // Day ↔ evening: the button flips the light and the room changes with it.
+    // A WebGL canvas cannot be read back from the page, so measure a screenshot of it.
+    const sig = async () => {
+      const png = await page.screenshot({ type: "png" });
+      const { channels } = await sharp(png).stats();
+      return Math.round(channels.slice(0, 3).reduce((a, c) => a + c.mean, 0));
+    };
+    const mood0 = await page.$eval("[data-light-toggle]", (el) => el.dataset.lightToggle).catch(() => null);
+    const bright0 = await sig();
+    await page.click("[data-light-toggle]");
+    await page.waitForTimeout(2600);
+    const mood1 = await page.$eval("[data-light-toggle]", (el) => el.dataset.lightToggle).catch(() => null);
+    const bright1 = await sig();
+    record(
+      viewport.name,
+      route,
+      "day/evening toggle changes the light",
+      !!mood0 && !!mood1 && mood0 !== mood1 && (mood1 === "evening" ? bright1 < bright0 : bright1 > bright0),
+      `${mood0} → ${mood1}, brightness ${bright0} → ${bright1}`,
+    );
+    await page.screenshot({ path: join(OUT, `store-${viewport.name}-03-${mood1}.png`) });
+
     record(viewport.name, route, "no page/console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     record(viewport.name, route, "no unexpected 4xx/5xx", bad.length === 0, bad.slice(0, 3).join(" | "));
   });

@@ -9,8 +9,8 @@
  *
  * Sent with navigator.sendBeacon when the page is hidden (at most three times
  * a visit), plus a "stalled" note if the story has not started after 12 s.
- * Off on localhost, under automation (the verify harness), and with
- * NEXT_PUBLIC_STORY_REPORTS=off.
+ * Off on local and LAN addresses, under automation (the verify harness), and
+ * with NEXT_PUBLIC_STORY_REPORTS=off.
  */
 
 const ENDPOINT = "/api/story-report";
@@ -30,7 +30,8 @@ function wanted(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   if (process.env.NEXT_PUBLIC_STORY_REPORTS === "off") return false;
   if (navigator.webdriver) return false;
-  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return false;
+  // Local and LAN addresses are someone testing, not a visitor.
+  if (/^(localhost|\[::1\]|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname)) return false;
   return typeof navigator.sendBeacon === "function";
 }
 

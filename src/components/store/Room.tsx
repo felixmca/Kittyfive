@@ -3,10 +3,16 @@
  * The living room. Procedural primitives by default; if /models/room.glb
  * exists it is loaded instead, inside an error boundary that falls back to the
  * primitives. Lights live in StoreScene so both variants are lit.
+ *
+ * The primitives have the river in the window (RiverWindow, a shader) and a
+ * glass door in the back wall, with Kitty's cat flap, out to the garden
+ * (Garden.tsx). The plants sway; the light is day or evening (ambience.ts).
  */
 import { Suspense } from "react";
 import { RoundedBox, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import Garden, { GARDEN_DOOR, Sway } from "./Garden";
+import RiverWindow from "./RiverWindow";
 import SceneErrorBoundary from "./SceneErrorBoundary";
 import { useAssetExists } from "./useAssetExists";
 import { ROOM } from "./spots";
@@ -72,6 +78,14 @@ const TABLE_LEGS: Array<[number, number]> = [
   [0.21, 0.41],
 ];
 const CUPBOARD_HANDLES = [-1.1, -0.4, 0.3, 1.0];
+/** x, y, z, radius, tilt of each leaf on the tall plant. */
+const TALL_PLANT_LEAVES: Array<[number, number, number, number, number]> = [
+  [0, 0.28, 0, 0.3, 0],
+  [0.16, 0.12, 0.04, 0.22, -0.7],
+  [-0.15, 0.18, -0.02, 0.24, 0.8],
+  [0.05, 0.44, 0.05, 0.2, -0.3],
+  [-0.08, 0.02, 0.1, 0.18, 0.5],
+];
 const HOB_RINGS = [0.4, 0.8];
 
 export function RoomPrimitives() {
@@ -92,11 +106,8 @@ export function RoomPrimitives() {
         <meshStandardMaterial color={CEILING} roughness={1} />
       </mesh>
 
-      {/* Three walls: back, left, right. The doorway wall behind the camera stays open. */}
-      <mesh position={[0, h / 2, ROOM.backZ]}>
-        <planeGeometry args={[WIDTH, h]} />
-        <meshStandardMaterial color={PLASTER} roughness={0.95} />
-      </mesh>
+      {/* Three walls: back (with the garden door), left, right. The doorway wall behind the camera stays open. */}
+      <BackWall />
       <mesh rotation-y={Math.PI / 2} position={[ROOM.left, h / 2, CENTER_Z]}>
         <planeGeometry args={[DEPTH, h]} />
         <meshStandardMaterial color={PLASTER} roughness={0.95} />
@@ -105,27 +116,13 @@ export function RoomPrimitives() {
         <planeGeometry args={[DEPTH, h]} />
         <meshStandardMaterial color={PLASTER} roughness={0.95} />
       </mesh>
-      <mesh position={[0, 0.06, ROOM.backZ + 0.01]}>
-        <boxGeometry args={[WIDTH, 0.12, 0.02]} />
-        <meshStandardMaterial color={TRIM} roughness={0.6} />
-      </mesh>
-
-      {/* Window on the back wall with the river light behind it */}
+      {/* Window on the back wall with the river behind it */}
       <group position={[0.2, 1.55, ROOM.backZ]}>
         <mesh position={[0, 0, 0.03]}>
           <boxGeometry args={[2.3, 1.6, 0.06]} />
           <meshStandardMaterial color={FRAME} roughness={0.7} />
         </mesh>
-        <mesh position={[0, 0, 0.065]}>
-          <planeGeometry args={[2.12, 1.42]} />
-          <meshStandardMaterial
-            color={RIVER_LIGHT}
-            emissive={RIVER_LIGHT}
-            emissiveIntensity={1.7}
-            roughness={1}
-            toneMapped={false}
-          />
-        </mesh>
+        <RiverWindow width={2.12} height={1.42} position={[0, 0, 0.065]} />
         <mesh position={[0, 0, 0.075]}>
           <boxGeometry args={[0.04, 1.42, 0.02]} />
           <meshStandardMaterial color={FRAME} />
@@ -215,21 +212,45 @@ export function RoomPrimitives() {
         ))}
       </group>
 
-      {/* Small plant on the counter */}
+      {/* Small plant on the counter, moving a little in the draught from the door */}
       <group position={[2.65, ROOM.counterHeight, -1.9]}>
         <mesh position={[0, 0.08, 0]}>
           <cylinderGeometry args={[0.09, 0.07, 0.16, 16]} />
           <meshStandardMaterial color={TERRACOTTA} roughness={0.9} />
         </mesh>
-        <mesh position={[0, 0.33, 0]}>
-          <coneGeometry args={[0.16, 0.34, 8]} />
-          <meshStandardMaterial color={LEAF} roughness={0.9} />
-        </mesh>
-        <mesh position={[0.06, 0.26, 0.05]} rotation-z={-0.3}>
-          <coneGeometry args={[0.1, 0.24, 7]} />
-          <meshStandardMaterial color={LEAF_LIGHT} roughness={0.9} />
-        </mesh>
+        <Sway position={[0, 0.16, 0]} amount={0.04} speed={0.9} phase={1.1}>
+          <mesh position={[0, 0.17, 0]}>
+            <coneGeometry args={[0.16, 0.34, 8]} />
+            <meshStandardMaterial color={LEAF} roughness={0.9} />
+          </mesh>
+          <mesh position={[0.06, 0.1, 0.05]} rotation-z={-0.3}>
+            <coneGeometry args={[0.1, 0.24, 7]} />
+            <meshStandardMaterial color={LEAF_LIGHT} roughness={0.9} />
+          </mesh>
+        </Sway>
       </group>
+
+      {/* A tall plant beside the window (clear of Kitty's path along the back wall) */}
+      <group position={[1.75, 0, ROOM.backZ + 0.32]}>
+        <mesh position={[0, 0.17, 0]}>
+          <cylinderGeometry args={[0.17, 0.13, 0.34, 18]} />
+          <meshStandardMaterial color={TERRACOTTA} roughness={0.9} />
+        </mesh>
+        <mesh position={[0, 0.55, 0]}>
+          <cylinderGeometry args={[0.012, 0.016, 0.5, 6]} />
+          <meshStandardMaterial color="#4b5d34" roughness={1} />
+        </mesh>
+        <Sway position={[0, 0.72, 0]} amount={0.035} speed={0.7} phase={2.4}>
+          {TALL_PLANT_LEAVES.map(([x, y, z, r, tilt]) => (
+            <mesh key={`${x}:${y}`} position={[x, y, z]} rotation-z={tilt} scale={[1, 1.35, 0.35]}>
+              <sphereGeometry args={[r, 10, 8]} />
+              <meshStandardMaterial color={x > 0 ? LEAF_LIGHT : LEAF} roughness={0.9} flatShading />
+            </mesh>
+          ))}
+        </Sway>
+      </group>
+
+      <Garden />
 
       {/* Floor lamp by the sofa; the warm point light in StoreScene sits in the shade */}
       <group position={[-2.6, 0, -1.1]}>
@@ -266,6 +287,90 @@ export function RoomPrimitives() {
         <mesh position={[0.02, -0.02, 0.019]}>
           <circleGeometry args={[0.09, 24]} />
           <meshStandardMaterial color={INK} roughness={0.8} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/**
+ * The back wall with the garden door cut out of it: plaster around the
+ * opening, skirting either side, a frame, a glass door (mostly see-through)
+ * and Kitty's cat flap at the bottom.
+ */
+function BackWall() {
+  const h = ROOM.height;
+  const z = ROOM.backZ;
+  const x0 = GARDEN_DOOR.x - GARDEN_DOOR.width / 2;
+  const x1 = GARDEN_DOOR.x + GARDEN_DOOR.width / 2;
+  const dh = GARDEN_DOOR.height;
+  const leftW = x0 - ROOM.left;
+  const rightW = ROOM.right - x1;
+  return (
+    <group>
+      <mesh position={[ROOM.left + leftW / 2, h / 2, z]}>
+        <planeGeometry args={[leftW, h]} />
+        <meshStandardMaterial color={PLASTER} roughness={0.95} />
+      </mesh>
+      <mesh position={[x1 + rightW / 2, h / 2, z]}>
+        <planeGeometry args={[rightW, h]} />
+        <meshStandardMaterial color={PLASTER} roughness={0.95} />
+      </mesh>
+      <mesh position={[GARDEN_DOOR.x, (dh + h) / 2, z]}>
+        <planeGeometry args={[GARDEN_DOOR.width, h - dh]} />
+        <meshStandardMaterial color={PLASTER} roughness={0.95} />
+      </mesh>
+      {/* Skirting either side of the door */}
+      <mesh position={[ROOM.left + leftW / 2, 0.06, z + 0.01]}>
+        <boxGeometry args={[leftW, 0.12, 0.02]} />
+        <meshStandardMaterial color={TRIM} roughness={0.6} />
+      </mesh>
+      <mesh position={[x1 + rightW / 2, 0.06, z + 0.01]}>
+        <boxGeometry args={[rightW, 0.12, 0.02]} />
+        <meshStandardMaterial color={TRIM} roughness={0.6} />
+      </mesh>
+      {/* Frame */}
+      {[x0, x1].map((x) => (
+        <mesh key={x} position={[x, dh / 2, z + 0.02]}>
+          <boxGeometry args={[0.07, dh, 0.1]} />
+          <meshStandardMaterial color={TRIM} roughness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[GARDEN_DOOR.x, dh, z + 0.02]}>
+        <boxGeometry args={[GARDEN_DOOR.width + 0.07, 0.07, 0.1]} />
+        <meshStandardMaterial color={TRIM} roughness={0.6} />
+      </mesh>
+      {/* The door: a thin frame round a pane of glass, a solid kick panel, the cat flap */}
+      <group position={[GARDEN_DOOR.x, 0, z - 0.01]}>
+        {[-1, 1].map((side) => (
+          <mesh key={side} position={[side * (GARDEN_DOOR.width / 2 - 0.07), dh / 2, 0]}>
+            <boxGeometry args={[0.06, dh - 0.04, 0.04]} />
+            <meshStandardMaterial color={FRAME} roughness={0.6} />
+          </mesh>
+        ))}
+        <mesh position={[0, dh - 0.06, 0]}>
+          <boxGeometry args={[GARDEN_DOOR.width - 0.1, 0.06, 0.04]} />
+          <meshStandardMaterial color={FRAME} roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.47, 0]}>
+          <boxGeometry args={[GARDEN_DOOR.width - 0.1, 0.06, 0.04]} />
+          <meshStandardMaterial color={FRAME} roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.24, 0]}>
+          <boxGeometry args={[GARDEN_DOOR.width - 0.14, 0.44, 0.03]} />
+          <meshStandardMaterial color={FRAME} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, 0.2, 0.02]}>
+          <boxGeometry args={[0.26, 0.24, 0.012]} />
+          <meshStandardMaterial color="#1b1b1f" roughness={0.4} />
+        </mesh>
+        <mesh position={[0, 0.2, 0.027]}>
+          <boxGeometry args={[0.2, 0.18, 0.006]} />
+          <meshStandardMaterial color="#3d4a52" roughness={0.2} metalness={0.1} transparent opacity={0.8} />
+        </mesh>
+        <mesh position={[0, 1.28, 0]}>
+          <planeGeometry args={[GARDEN_DOOR.width - 0.14, 1.56]} />
+          <meshStandardMaterial color={RIVER_LIGHT} roughness={0.05} metalness={0.1} transparent opacity={0.1} depthWrite={false} />
         </mesh>
       </group>
     </group>

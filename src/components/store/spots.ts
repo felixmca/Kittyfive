@@ -85,6 +85,16 @@ export function spotFor(index: number): Spot {
   return SPOTS[wrapIndex(index, SPOTS.length)];
 }
 
+/**
+ * Where Kitty wanders when nobody needs her (Kitty.tsx), and what she says
+ * there. The garden door is in the back wall (Garden.tsx: x -1.9).
+ */
+export const POINTS_OF_INTEREST: { position: Vec3; yaw: number; line: string }[] = [
+  { position: [0.25, 0, -2.1], yaw: Math.PI, line: "The river. I keep an eye on it." },
+  { position: [-1.9, 0, -2.15], yaw: Math.PI, line: "The garden. Mostly mine." },
+  { position: [-0.5, 0, 0.35], yaw: 0.6, line: "This is the good bit of rug." },
+];
+
 /** Kitty's walking pace, m/s. */
 export const WALK_SPEED = 0.6;
 /** How fast she turns on the spot, rad/s. */
