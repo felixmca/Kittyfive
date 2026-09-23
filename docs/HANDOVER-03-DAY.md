@@ -408,6 +408,11 @@ send is used up for nothing.
   [PRIVACY-DRAFT.md](PRIVACY-DRAFT.md). Not published; it has [brackets]
   only you can fill in.
 
+One slip to own up to: while checking that production sends story reports,
+one report from my test browser got through (Playwright does not intercept
+the way reports are sent). I deleted it, and the server now ignores reports
+from test browsers. So `story_reports` is empty again, ready for your visit.
+
 On a slow 3G connection (emulated) the landing's story starts after about
 18 s behind the Kittyfive splash, mostly the page's own scripts arriving;
 it used to start at 16 s but on the *end* of chapter 1 (the only picture
