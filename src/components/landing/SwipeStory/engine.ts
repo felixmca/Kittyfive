@@ -606,18 +606,38 @@ export class SwipeEngine {
     // Back from another tab or app, or from the back/forward cache: the decode
     // window was given back while hidden, and iOS may have dropped the
     // canvas's pixels, so load and draw again.
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
+    // Decoded frames are given back whenever nobody can see them: the page in
+    // the background, or the story scrolled well out of view (after its last
+    // stop, where the turntable decodes its own photos and iOS counts every
+    // megabyte). They come back as soon as any of it is in view (the frame it
+    // shows is kept while suspended, so there is never a blank), and the
+    // observed area is 2% inside the screen so a stage that merely touches
+    // its edge (the end section is exactly one screen tall) counts as gone.
+    let offscreen = false;
+    const applySuspend = () => {
+      if (document.visibilityState === "hidden" || offscreen) {
         this.media.suspend();
         return;
       }
       this.media.resume();
       this.redraw();
     };
-    document.addEventListener("visibilitychange", onVisibility);
-    this.cleanups.push(() => document.removeEventListener("visibilitychange", onVisibility));
+    document.addEventListener("visibilitychange", applySuspend);
+    this.cleanups.push(() => document.removeEventListener("visibilitychange", applySuspend));
+    if (typeof IntersectionObserver !== "undefined") {
+      const io = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry || entry.isIntersecting === !offscreen) return;
+          offscreen = !entry.isIntersecting;
+          applySuspend();
+        },
+        { rootMargin: "-2% 0px" },
+      );
+      io.observe(stage);
+      this.cleanups.push(() => io.disconnect());
+    }
     const onPageShow = () => {
-      this.media.resume();
+      applySuspend();
       if (!this.scrolling) this.syncMode();
       this.redraw();
     };

@@ -434,6 +434,11 @@ async function journeyLanding(browser, viewport) {
     const released = await storyState(page);
     const endTop = await page.$eval("[data-story-end]", (el) => Math.round(el.getBoundingClientRect().top)).catch(() => 9999);
     record(viewport.name, route, "Skip releases the page to the end", released.mode === "released" && Math.abs(endTop) <= 4, `mode=${released.mode} end top=${endTop}`);
+    // Out of view, the story gives its decoded frames back (the frame it
+    // showed is kept), so the turntable's photos do not stack on top of them.
+    await page.waitForTimeout(600);
+    const heldAtEnd = await page.evaluate(() => window.__swipeStory?.debugState?.().media.decoded ?? -1);
+    record(viewport.name, route, "past the story, its frames are given back (phone memory)", heldAtEnd >= 0 && heldAtEnd <= 2, `${heldAtEnd} decoded`);
     await page.screenshot({ path: join(OUT, `landing-${viewport.name}-09-bottom.png`) });
     for (const label of ["Kitty Stories", "Kitty Store"]) {
       const sel = `main a:has-text("${label}")`;
