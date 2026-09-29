@@ -7,7 +7,8 @@ returns `{ received: true, demo: true }`, and `DemoBanner` shows
 
 Live mode switches on automatically when all four of these are present:
 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`. Printify and Resend are optional extras.
+`SUPABASE_SERVICE_ROLE_KEY`. A print provider (Printful, the UK primary, or
+Printify) and Resend are optional extras.
 
 Check what the server thinks at any time: `GET /api/commerce/status`
 (booleans only, never secrets; in demo mode it also runs `selfcheck.ts`).
@@ -23,7 +24,9 @@ Check what the server thinks at any time: `GET /api/commerce/status`
 | `demo.ts` | in-memory implementation |
 | `orders.ts` | Supabase writes: idempotent insert, status updates, append-only events |
 | `supabaseAdmin.ts` | service-role client, server-only (throws if imported in a browser) |
-| `pod/printify.ts`, `pod/demo.ts` | print-on-demand adapters behind `pod/types.ts` |
+| `pod/printful.ts` | print-on-demand adapter — **Printful, the UK primary** |
+| `pod/printify.ts` | print-on-demand adapter — Printify, the fallback |
+| `pod/demo.ts` | print-on-demand adapter — demo (used when no token is configured) |
 | `email.ts` | Resend if configured, else `console.log` |
 | `selfcheck.ts` | config invariants for `/api/commerce/status` |
 | `origin.ts`, `format.ts` | helpers |
@@ -85,6 +88,11 @@ STRIPE_SECRET_KEY=sk_live_…                          # sk_test_… in Preview
 STRIPE_WEBHOOK_SECRET=whsec_…                        # one per endpoint
 NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=…
+# Print provider — set EITHER Printful (UK primary) OR Printify; if both are set, Printful wins.
+PRINTFUL_API_TOKEN=…                                 # Printful (UK primary)
+PRINTFUL_STORE_ID=…                                  # Printful store id
+PRINTFUL_WEBHOOK_SECRET=…                            # recommended; v1 webhooks unsigned, registered as ?secret=…
+PRINTFUL_CONFIRM=1                                    # optional; 0 creates a draft order for review
 PRINTIFY_API_TOKEN=…                                 # optional
 PRINTIFY_SHOP_ID=…                                   # optional
 PRINTIFY_WEBHOOK_SECRET=…                            # optional but recommended
@@ -93,7 +101,52 @@ RESEND_API_KEY=re_…                                  # optional
 EMAIL_FROM=Kitty <kitty@yourdomain>                  # optional; domain must be verified in Resend
 ```
 
-## 4. Printify
+## 4. Print provider — Printful (UK primary) or Printify (fallback)
+
+`pod/index.ts` selects **Printful** when `PRINTFUL_API_TOKEN` + `PRINTFUL_STORE_ID`
+are set (the UK primary: its Wolverhampton factory does the cap and hoodie
+embroidery and Kornit water-based DTG, and ships UK orders from there), else
+**Printify** when `PRINTIFY_API_TOKEN` + `PRINTIFY_SHOP_ID` are set, else the demo
+provider. Never both at once — one shop, one fulfilment partner.
+
+Whichever you use, the one thing that turns a paid order into a fulfilled order is
+filling `podProductId` + `podVariantId` on each variant in
+`src/config/products.ts`. **A variant missing either id is never sent to the
+provider** — the webhook logs an `order_events` row of type `pod_unmapped`, leaves
+the order at status `paid`, and you fulfil it by hand. `scripts/pod-ids.mjs` reads
+your provider token (from the shell or `.env.local`) and prints every id plus a
+ready-to-paste snippet, for whichever provider you configured.
+
+### 4a. Printful (primary)
+
+1. Create the three products in the Printful dashboard (embroidered cap,
+   embroidered hoodie, DTG long-sleeve) with the print files attached.
+   Publishing to a channel is not required for API orders.
+2. Get a store-scoped token: Dashboard → Settings → API → Add token, and note the
+   store id it is scoped to.
+3. Fetch the ids: `PRINTFUL_API_TOKEN=… PRINTFUL_STORE_ID=… node scripts/pod-ids.mjs`
+   (or put both in `.env.local` and run `node scripts/pod-ids.mjs`). It prints each
+   product's `podProductId` (sync product id, string) and each variant's
+   `podVariantId` (sync variant id, number). Manually this is `GET /store/products`
+   then `GET /store/products/{id}` with `Authorization: Bearer <token>` and
+   `X-PF-Store-Id: <store id>`. Paste the ids into `src/config/products.ts`.
+4. Order flow (`pod/printful.ts`, API v1 — v2 is still Open Beta as of Sept 2026):
+   `POST https://api.printful.com/orders?confirm=true` with those two headers,
+   body `{ external_id, shipping: "STANDARD", recipient: { name, address1,
+   address2, city, state_code, country_code, zip, phone, email },
+   items: [{ sync_variant_id, quantity }] }` → `{ result: { id } }`. `confirm=true`
+   pays and starts fulfilment immediately; set `PRINTFUL_CONFIRM=0` to create a
+   draft for review instead. Printful bills the card on file in your Printful
+   account for base cost + shipping.
+5. Shipment webhook: `POST https://api.printful.com/webhooks` with `{ url, types }`,
+   URL `https://<your-domain>/api/webhooks/pod?secret=<PRINTFUL_WEBHOOK_SECRET>`,
+   types `package_shipped`, `order_canceled`, `order_failed`, `order_updated`.
+   **Printful v1 webhooks are not signed**, so the secret rides in the URL; the
+   route copies it into the `x-printful-webhook-secret` header and the adapter
+   requires it to equal `PRINTFUL_WEBHOOK_SECRET` (constant-time compare).
+   `package_shipped` → status `shipped`, tracking saved, customer emailed.
+
+### 4b. Printify (fallback)
 
 1. Create the three products in Printify (embroidered cap, embroidered hoodie,
    screen-printed long-sleeve). Publishing is not required for API orders.
@@ -129,7 +182,7 @@ EMAIL_FROM=Kitty <kitty@yourdomain>                  # optional; domain must be 
 
 Set `RESEND_API_KEY` and `EMAIL_FROM` (a verified domain in Resend). Two mails:
 order confirmation (from the Stripe webhook) and shipped-with-tracking (from the
-Printify webhook). Without the keys, both are logged to the server console.
+print provider's webhook). Without the keys, both are logged to the server console.
 Stripe also sends its own receipt if you enable it under Settings → Emails.
 
 ## 6. Fee maths for the £1 snack
@@ -152,7 +205,7 @@ what hurts at this price: a £2 snack nets £1.77 (11.5% fees), a £3 snack nets
 `src/config/products.ts` or offer £1/£3/£5 options; nothing else needs changing.
 
 Merch: a £55 hoodie + £3.99 shipping = £58.99 charged; Stripe fee 1.5% + 20p =
-£1.08; Printify then bills its base cost + shipping separately.
+£1.08; the print provider then bills its base cost + shipping separately.
 
 ## 7. Exercising it
 

@@ -1,6 +1,8 @@
 /**
- * Print-on-demand adapter contract. Printify by default (./printify.ts); a
- * demo provider (./demo.ts) when no token is configured.
+ * Print-on-demand adapter contract. Printful is the primary UK provider
+ * (./printful.ts) when PRINTFUL_API_TOKEN + PRINTFUL_STORE_ID are set; Printify
+ * (./printify.ts) is the fallback; a demo provider (./demo.ts) runs when neither
+ * token is configured.
  */
 import { findVariant } from "@/config/products";
 import type { OrderStatus, PostalAddress, Tracking } from "../types";
@@ -35,7 +37,8 @@ export interface PodOrderRef {
 
 export interface PodCreateResult {
   providerOrderId: string;
-  /** Printify: whether send_to_production succeeded. */
+  /** Whether the order started production: send_to_production (Printify) or
+   * confirm (Printful) succeeded. */
   sentToProduction?: boolean;
   note?: string;
 }

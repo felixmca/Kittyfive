@@ -158,7 +158,7 @@ async function fulfil(order: OrderRow, items: OrderItemRow[]): Promise<OrderRow>
   }
   if (!hasPod()) {
     await appendEvent(order.id, "pod_not_configured", {
-      note: "PRINTIFY_API_TOKEN / PRINTIFY_SHOP_ID unset; fulfil manually. Status stays paid.",
+      note: "No print provider configured (set PRINTFUL_API_TOKEN + PRINTFUL_STORE_ID, or PRINTIFY_API_TOKEN + PRINTIFY_SHOP_ID); fulfil manually. Status stays paid.",
     });
     return order;
   }
