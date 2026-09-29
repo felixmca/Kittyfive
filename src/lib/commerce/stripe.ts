@@ -286,6 +286,12 @@ export function createLiveCommerce(): Commerce {
             },
           },
         ],
+        // Kitty is the merchant of record on Stripe's standard (lower-fee)
+        // pricing, NOT Managed Payments. Set explicitly because an account with
+        // Managed Payments enabled by default rejects shipping_address_collection
+        // and requires a product tax code — and it is the higher-fee, tax-managed
+        // model. Standard pricing is the right (and cheaper) fit for a UK POD store.
+        managed_payments: { enabled: false },
         shipping_address_collection: { allowed_countries: ALLOWED_COUNTRIES },
         shipping_options: [
           {
@@ -332,6 +338,9 @@ export function createLiveCommerce(): Commerce {
             },
           },
         ],
+        // Opt out of Managed Payments here too (see createMerchCheckout): keeps
+        // Kitty merchant of record on standard, lower-fee Stripe pricing.
+        managed_payments: { enabled: false },
         metadata: { kind: "snack" },
         success_url: `${origin}/store?snack=thanks`,
         cancel_url: `${origin}/store`,
