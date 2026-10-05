@@ -1,10 +1,13 @@
 /**
- * Cheap invariants over src/config/products.ts and the env, returned by
- * GET /api/commerce/status in demo mode so a broken config is visible before
- * any money moves. Pure: no network, no database.
+ * Cheap invariants over src/config/products.ts, src/config/printful.ts,
+ * src/config/pod-ids.json and the env, returned by GET /api/commerce/status
+ * in demo mode so a broken config is visible before any money moves. Pure: no
+ * network, no database, no filesystem beyond the statically imported JSON.
  */
+import { podIds, podIdsFile } from "@/config/pod-ids";
+import { PRINTFUL_BLUEPRINTS, printfulCatalogVariant } from "@/config/printful";
 import { PRODUCTS, SHIPPING, SNACK, findVariant } from "@/config/products";
-import { getEnv, hasPod, hasStripe, hasSupabase } from "./env";
+import { getEnv, harnessOverridesPresent, hasPod, hasPrintful, hasPrintify, hasStripe, hasSupabase, type CommerceEnv } from "./env";
 
 export interface SelfCheck {
   name: string;
@@ -22,6 +25,13 @@ const STRIPE_UNSUPPORTED = new Set(["AS", "CX", "CC", "CU", "HM", "IR", "KP", "M
 
 function isPositiveInt(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n > 0;
+}
+
+/** The provider pod/index.ts would pick for this env, and the store it is scoped to. */
+function configuredProvider(env: CommerceEnv): { provider: "printful" | "printify" | "demo"; storeId: string | null } {
+  if (hasPrintful(env)) return { provider: "printful", storeId: env.printfulStoreId ?? null };
+  if (hasPrintify(env)) return { provider: "printify", storeId: env.printifyShopId ?? null };
+  return { provider: "demo", storeId: null };
 }
 
 export function runSelfCheck(): SelfCheckResult {
@@ -77,10 +87,96 @@ export function runSelfCheck(): SelfCheckResult {
     halfMapped.length === 0,
     halfMapped.length ? `podProductId without podVariantId (or vice versa): ${halfMapped.join(", ")}` : undefined,
   );
-  const mappedCount = allVariants.filter((v) => v.podProductId && typeof v.podVariantId === "number").length;
-  add("variants.podMapped", true, `${mappedCount}/${variantIds.length} variants mapped to a print provider`);
 
   const env = getEnv();
+  const active = configuredProvider(env);
+
+  // Store-mapped: ids written in products.ts, or generated for the configured
+  // provider + store. Catalog-mapped: no store ids, but a Printful blueprint
+  // (mapItemsToPod orders the catalog variant with its print files).
+  let storeMapped = 0;
+  let catalogMapped = 0;
+  for (const v of allVariants) {
+    const inline = Boolean(v.podProductId) && typeof v.podVariantId === "number";
+    if (inline || podIds(v.id, { provider: active.provider, storeId: active.storeId })) storeMapped += 1;
+    else if (printfulCatalogVariant(v.id)) catalogMapped += 1;
+  }
+  const unmappedCount = variantIds.length - storeMapped - catalogMapped;
+  add(
+    "variants.podMapped",
+    true,
+    `${storeMapped}/${variantIds.length} store-mapped (products.ts or pod-ids.json for ${active.provider}), ` +
+      `${catalogMapped}/${variantIds.length} catalog-mapped (Printful blueprint), ${unmappedCount} unmapped`,
+  );
+
+  // Every variant has exactly one blueprint entry, every blueprint variant is
+  // ours, and every print file lives under public/print.
+  const blueprintProblems: string[] = [];
+  const known = new Set(variantIds);
+  const seen = new Map<string, number>();
+  for (const blueprint of PRINTFUL_BLUEPRINTS) {
+    for (const id of Object.keys(blueprint.variants)) {
+      seen.set(id, (seen.get(id) ?? 0) + 1);
+      if (!known.has(id)) blueprintProblems.push(`${blueprint.productId} lists unknown variant ${id}`);
+    }
+    for (const placement of blueprint.placements) {
+      if (!placement.file.startsWith("/print/")) {
+        blueprintProblems.push(`${blueprint.productId}/${placement.placement} file ${placement.file} is not under /print/`);
+      }
+    }
+  }
+  for (const id of variantIds) {
+    const count = seen.get(id) ?? 0;
+    if (count === 0) blueprintProblems.push(`${id} has no blueprint`);
+    else if (count > 1) blueprintProblems.push(`${id} is in ${count} blueprints`);
+  }
+  add(
+    "printful.blueprintsCoverEveryVariant",
+    blueprintProblems.length === 0,
+    blueprintProblems.length
+      ? blueprintProblems.join("; ")
+      : `${PRINTFUL_BLUEPRINTS.length} blueprints cover all ${variantIds.length} variants`,
+  );
+
+  // A catalog order sends Printful the print-file URLs built from
+  // NEXT_PUBLIC_SITE_URL; mapItemsToPod refuses anything but https.
+  const siteUrl = env.siteUrl ?? "";
+  const httpsSite = /^https:\/\//i.test(siteUrl);
+  const printfulConfigured = hasPrintful(env);
+  add(
+    "printful.catalogOrderNeedsHttpsSiteUrl",
+    !printfulConfigured || httpsSite,
+    printfulConfigured
+      ? httpsSite
+        ? `NEXT_PUBLIC_SITE_URL is https; Printful can fetch /print files for catalog orders`
+        : `NEXT_PUBLIC_SITE_URL is ${siteUrl ? "not https" : "unset"}: variants without store ids cannot be ordered from the catalog and will be left unmapped`
+      : `Printful not configured; NEXT_PUBLIC_SITE_URL ${httpsSite ? "is https" : siteUrl ? "is not https (catalog orders would be unmapped)" : "is unset (catalog orders would be unmapped)"}`,
+  );
+
+  // Generated store ids only mean something inside the store they came from.
+  const ids = podIdsFile();
+  const idCount = Object.keys(ids.variants).length;
+  if (ids.provider && ids.storeId) {
+    if (active.provider === "demo") {
+      add(
+        "podIds.matchesConfiguredStore",
+        true,
+        `pod-ids.json has ${idCount} ids for ${ids.provider} store ${ids.storeId}; no provider configured, so they are unused`,
+      );
+    } else {
+      const matches = ids.provider === active.provider && ids.storeId === active.storeId;
+      add(
+        "podIds.matchesConfiguredStore",
+        matches,
+        matches
+          ? `pod-ids.json: ${idCount} ids for ${ids.provider} store ${ids.storeId}`
+          : `pod-ids.json was generated for ${ids.provider} store ${ids.storeId} but the configured provider is ${active.provider} store ${active.storeId ?? "(none)"}; its ids are ignored — re-run the sync for this store`,
+      );
+    }
+  } else {
+    add("podIds.matchesConfiguredStore", true, "no generated ids yet");
+  }
+
   const stripeHalf = Boolean(env.stripeSecretKey) !== Boolean(env.stripeWebhookSecret);
   add(
     "env.stripePairComplete",
@@ -116,6 +212,14 @@ export function runSelfCheck(): SelfCheckResult {
     "env.printifyPairComplete",
     !podHalf,
     podHalf ? "one of PRINTIFY_API_TOKEN / PRINTIFY_SHOP_ID is missing" : hasPod(env) ? "configured" : "unset (demo)",
+  );
+  const overrides = harnessOverridesPresent();
+  add(
+    "env.noHarnessOverrides",
+    overrides.length === 0,
+    overrides.length
+      ? `${overrides.join(", ")} set: these exist for scripts/verify-commerce.mjs only (ignored in production unless they point at localhost)`
+      : undefined,
   );
   const liveKeyInDemo = Boolean(env.stripeSecretKey?.startsWith("sk_live_")) && !hasSupabase(env);
   add(

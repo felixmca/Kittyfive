@@ -1,20 +1,34 @@
 /**
- * Printify adapter.
+ * Printify adapter (the fallback; Printful is the UK primary).
  *
- * Verified against https://developers.printify.com/openapi.json (Sept 2026):
+ * Verified against https://developers.printify.com/openapi.json (5 Oct 2026):
  *   POST /v1/shops/{shop_id}/orders.json
  *     body: { external_id?, label?, line_items: [{ product_id, variant_id, quantity }],
  *             shipping_method?, send_shipping_notification?,
  *             address_to: { first_name, last_name, email, phone, country, region?,
  *                           address1, address2?, city, zip } }
  *     200: { id }
- *   POST /v1/shops/{shop_id}/orders/{order_id}/send_to_production.json
+ *   POST /v1/shops/{shop_id}/orders/{order_id}/send_to_production.json → { id }
+ *   GET  /v1/shops/{shop_id}/orders/{order_id}.json → { id, status, shipments: [{ carrier, number, url, delivered_at }], ... }
+ *     status: pending | on-hold | sending-to-production | in-production | canceled |
+ *             fulfilled | partially-fulfilled | payment-not-received | callback-received | has-issues
  *   Webhook topics include order:created, order:updated, order:sent-to-production,
  *   order:shipment:created, order:shipment:delivered.
  *   Webhook signature: header X-Pfy-Signature = "sha256=" + HMAC-SHA256(rawBody, secret).
+ *   A 429 carries Retry-After; every call waits (capped at 5 s, 2 s when absent) and retries once.
+ *   GET  /v1/shops/{shop_id}/orders.json?limit=50 lists recent orders (external_id per order): if
+ *   POST orders.json fails after Printify stored the order, createOrder finds it there instead of
+ *   ordering twice (the Printify counterpart of Printful's GET /orders/@{external_id}).
+ *
+ * Printify has no catalog fallback: every item needs the store's product id +
+ * variant id (src/config/products.ts or the generated src/config/pod-ids.json),
+ * otherwise createOrder throws PodUnmappedError listing the variants.
+ *
+ * `apiUrl` (PRINTIFY_API_URL, verify harness only) replaces the whole base
+ * "https://api.printify.com/v1", so a mock must serve /shops/... under the URL given.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { Tracking } from "../types";
+import type { OrderStatus, Tracking } from "../types";
 import {
   PodSignatureError,
   PodUnmappedError,
@@ -23,22 +37,48 @@ import {
   type PodEvent,
   type PodLineItem,
   type PodOrderRef,
+  type PodOrderStatus,
   type PodProvider,
 } from "./types";
 
-const BASE_URL = "https://api.printify.com/v1";
+export const PRINTIFY_API_URL = "https://api.printify.com/v1";
 const USER_AGENT = "Kitty/1.0 (Node.js)";
 const TIMEOUT_MS = 15_000;
+const RETRY_AFTER_DEFAULT_MS = 2_000;
+const RETRY_AFTER_MAX_MS = 5_000;
 
 export interface PrintifyConfig {
   token: string;
   shopId: string;
   webhookSecret?: string;
   sendToProduction?: boolean;
+  /** Base URL override for the verify harness only; defaults to PRINTIFY_API_URL (includes /v1). */
+  apiUrl?: string;
 }
 
-async function printifyFetch<T>(cfg: PrintifyConfig, path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+interface PrintifyOrder {
+  id?: string | number;
+  status?: string;
+  shipments?: unknown[];
+}
+
+function baseUrl(cfg: PrintifyConfig): string {
+  return (cfg.apiUrl?.trim() || PRINTIFY_API_URL).replace(/\/+$/, "");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryAfterMs(header: string | null): number {
+  const seconds = header ? Number.parseFloat(header.trim()) : Number.NaN;
+  if (!Number.isFinite(seconds) || seconds < 0) return RETRY_AFTER_DEFAULT_MS;
+  return Math.min(Math.round(seconds * 1000), RETRY_AFTER_MAX_MS);
+}
+
+async function printifyFetch<T>(cfg: PrintifyConfig, path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
+  const method = init.method ?? "GET";
+  const res = await fetch(`${baseUrl(cfg)}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${cfg.token}`,
@@ -49,9 +89,15 @@ async function printifyFetch<T>(cfg: PrintifyConfig, path: string, init: Request
     },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+  if (res.status === 429 && attempt === 0) {
+    const wait = retryAfterMs(res.headers.get("retry-after"));
+    console.warn(`[printify] 429 on ${method} ${path}; retrying once in ${wait} ms`);
+    await sleep(wait);
+    return printifyFetch<T>(cfg, path, init, attempt + 1);
+  }
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Printify ${init.method ?? "GET"} ${path} failed: ${res.status} ${text.slice(0, 500)}`);
+    throw new Error(`Printify ${method} ${path} failed: ${res.status} ${text.slice(0, 500)}`);
   }
   try {
     return (text ? JSON.parse(text) : {}) as T;
@@ -77,6 +123,10 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
+function idString(value: unknown): string | null {
+  return typeof value === "string" && value ? value : typeof value === "number" ? String(value) : null;
+}
+
 /** Printify has shipped a few payload shapes; look in all the usual places. */
 function extractTracking(data: Record<string, unknown>): Tracking | null {
   const shipments = Array.isArray(data.shipments) ? data.shipments : [];
@@ -87,10 +137,28 @@ function extractTracking(data: Record<string, unknown>): Tracking | null {
     const carrierObj = asRecord(o.carrier);
     const carrier = str(o.carrier) ?? str(carrierObj.code) ?? str(o.code) ?? str(o.carrier_code);
     const number = str(o.number) ?? str(o.tracking_number) ?? str(carrierObj.tracking_number);
-    const url = str(o.url) ?? str(o.tracking_url) ?? str(carrierObj.tracking_url);
+    const rawUrl = str(o.url) ?? str(o.tracking_url) ?? str(carrierObj.tracking_url);
+    // Rendered as a link on the success page: only http(s) is ever stored.
+    const url = rawUrl && /^https?:\/\//i.test(rawUrl) ? rawUrl : undefined;
     if (number || url) return { carrier: carrier ?? null, number: number ?? null, url: url ?? null };
   }
   return null;
+}
+
+/** Printify order status → ours (null when we do not model the movement). */
+export function mapPrintifyStatus(status: string | null | undefined): OrderStatus | null {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "in-production":
+    case "sending-to-production":
+      return "in_production";
+    case "fulfilled":
+      return "shipped";
+    case "canceled":
+    case "cancelled":
+      return "cancelled";
+    default:
+      return null;
+  }
 }
 
 /** Pure mapping from a parsed Printify webhook body to our event. Shared with the demo provider. */
@@ -99,9 +167,7 @@ export function parsePrintifyPayload(json: unknown): PodEvent | null {
   const body = json as Record<string, unknown>;
   const topic = str(body.type) ?? str(body.topic) ?? "";
   const resource = asRecord(body.resource);
-  const rawId = resource.id;
-  const providerOrderId =
-    typeof rawId === "string" ? rawId : typeof rawId === "number" ? String(rawId) : null;
+  const providerOrderId = idString(resource.id);
   const data = asRecord(resource.data);
   const tracking = extractTracking(data);
 
@@ -123,11 +189,38 @@ export function parsePrintifyPayload(json: unknown): PodEvent | null {
 }
 
 export function createPrintifyProvider(cfg: PrintifyConfig): PodProvider {
+  const shop = encodeURIComponent(cfg.shopId);
+
+  const sendToProduction = async (providerOrderId: string): Promise<PodCreateResult> => {
+    await printifyFetch(cfg, `/shops/${shop}/orders/${encodeURIComponent(providerOrderId)}/send_to_production.json`, {
+      method: "POST",
+      body: "{}",
+    });
+    return { providerOrderId, sentToProduction: true };
+  };
+
+  /** Printify's recent orders carry external_id; the first page is enough for an order created seconds ago. */
+  const findByExternalId = async (externalId: string): Promise<{ id?: string | number; status?: string } | null> => {
+    try {
+      const page = await printifyFetch<{ data?: Array<{ id?: string | number; external_id?: string; status?: string }> }>(
+        cfg,
+        `/shops/${shop}/orders.json?limit=50`,
+      );
+      const found = (page?.data ?? []).find((o) => o && o.external_id === externalId);
+      return found && idString(found.id) ? found : null;
+    } catch {
+      return null;
+    }
+  };
+
   return {
     name: "printify",
+    storeId: cfg.shopId,
 
     async createOrder(order: PodOrderRef, items: PodLineItem[], address: PodAddress): Promise<PodCreateResult> {
       if (!items.length) throw new PodUnmappedError([]);
+      const unmapped = items.filter((i) => !i.podProductId || typeof i.podVariantId !== "number").map((i) => i.variantId);
+      if (unmapped.length) throw new PodUnmappedError(unmapped);
       const body = {
         external_id: order.stripeSessionId,
         label: `Kitty ${order.id.slice(0, 8)}`,
@@ -151,26 +244,58 @@ export function createPrintifyProvider(cfg: PrintifyConfig): PodProvider {
           zip: address.zip,
         },
       };
-      const created = await printifyFetch<{ id: string }>(cfg, `/shops/${cfg.shopId}/orders.json`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      const providerOrderId = String(created.id);
+      let created: { id: string | number } | null = null;
+      try {
+        created = await printifyFetch<{ id: string | number }>(cfg, `/shops/${shop}/orders.json`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      } catch (err) {
+        // Printify may have stored the order before the failure (timeout, 5xx
+        // after commit). Look for it by external_id before giving up, so a
+        // retry never orders twice.
+        const existing = await findByExternalId(body.external_id);
+        if (existing) {
+          const status = (str(existing.status) ?? "").toLowerCase();
+          const inProduction = status !== "" && status !== "pending" && status !== "on-hold" && status !== "payment-not-received";
+          return {
+            providerOrderId: idString(existing.id) as string,
+            sentToProduction: inProduction,
+            note: `recovered existing order by external_id (status ${status || "unknown"})`,
+          };
+        }
+        throw err;
+      }
+      const providerOrderId = idString(created?.id);
+      if (!providerOrderId) throw new Error("Printify POST orders.json returned no order id");
 
       if (cfg.sendToProduction === false) {
         return { providerOrderId, sentToProduction: false, note: "held: PRINTIFY_SEND_TO_PRODUCTION=0" };
       }
       try {
-        await printifyFetch(cfg, `/shops/${cfg.shopId}/orders/${providerOrderId}/send_to_production.json`, {
-          method: "POST",
-          body: "{}",
-        });
-        return { providerOrderId, sentToProduction: true };
+        return await sendToProduction(providerOrderId);
       } catch (err) {
         const note = err instanceof Error ? err.message : String(err);
         console.error("[printify] created order but send_to_production failed:", note);
         return { providerOrderId, sentToProduction: false, note };
       }
+    },
+
+    async confirmOrder(providerOrderId: string): Promise<PodCreateResult> {
+      return sendToProduction(providerOrderId);
+    },
+
+    async getOrder(providerOrderId: string): Promise<PodOrderStatus> {
+      const found = await printifyFetch<PrintifyOrder>(cfg, `/shops/${shop}/orders/${encodeURIComponent(providerOrderId)}.json`);
+      const record = asRecord(found);
+      const providerStatus = (str(record.status) ?? "").toLowerCase();
+      return {
+        providerOrderId: idString(record.id) ?? providerOrderId,
+        providerStatus,
+        status: mapPrintifyStatus(providerStatus),
+        tracking: extractTracking(record),
+        raw: found,
+      };
     },
 
     parseWebhook(rawBody: string, headers: Headers): PodEvent | null {

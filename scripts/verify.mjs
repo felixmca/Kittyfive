@@ -1090,6 +1090,8 @@ async function journeyAdmin(browser, viewport) {
     await page.click("text=Show her full instructions");
     const prompt = (await page.$eval("[data-tunables-prompt]", (el) => el.textContent ?? "").catch(() => "")) ?? "";
     record(viewport.name, route, "her full instructions include the tuned voice", /You are Kitty/.test(prompt) && prompt.includes(after), `${prompt.length} chars`);
+    const ordersCard = await page.$eval("[data-admin-orders]", (el) => el.getAttribute("data-admin-orders")).catch(() => null);
+    record(viewport.name, route, "the Orders card is harmless in demo", ordersCard === "demo", String(ordersCard));
     await page.screenshot({ path: join(OUT, `admin-${viewport.name}-tunables.png`) });
     await goto(page, "/store?demo=1");
     await page.waitForTimeout(1500);

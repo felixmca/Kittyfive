@@ -98,7 +98,10 @@ export async function POST(req: NextRequest) {
         status: event.status,
         tracking: event.tracking ?? order.tracking,
       });
-      if (event.type === "shipment_created") {
+      // Email on the TRANSITION to shipped, whichever event carried it: Printful
+      // sends both order_updated (status fulfilled) and package_shipped, in no
+      // guaranteed order, and only one of them may move the status.
+      if (updated.status === "shipped" && order.status !== "shipped") {
         const mail = await sendShippedEmail(updated, event.tracking ?? updated.tracking);
         await appendEvent(order.id, mail.sent ? "email_shipped_sent" : "email_shipped_skipped", {
           to: updated.email,

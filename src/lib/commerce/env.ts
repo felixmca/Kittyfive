@@ -26,6 +26,14 @@ export interface CommerceEnv {
   resendApiKey?: string;
   emailFrom?: string;
   siteUrl?: string;
+  /**
+   * Base-URL overrides for the verify harness (scripts/verify-commerce.mjs),
+   * which stands up mock Stripe / Printful / Printify servers on localhost.
+   * Unset in every real deployment.
+   */
+  stripeApiBase?: string;
+  printfulApiUrl?: string;
+  printifyApiUrl?: string;
 }
 
 function read(name: string): string | undefined {
@@ -33,6 +41,41 @@ function read(name: string): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+/** True on Vercel or any production build: where the harness overrides must not redirect real traffic. */
+export function isDeployed(): boolean {
+  return Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production";
+}
+
+/**
+ * A base-URL override for the verify harness. When deployed (or built for
+ * production) it is honoured only if it points at this machine, so a stray or
+ * copied variable in Vercel can never send the Stripe key, the Printful token
+ * or a customer's address to another host. Ignored values are logged once.
+ */
+const warned = new Set<string>();
+function readHarnessUrl(name: string): string | undefined {
+  const value = read(name);
+  if (!value) return undefined;
+  if (!isDeployed()) return value;
+  let host = "";
+  try {
+    host = new URL(value).hostname;
+  } catch {
+    host = "";
+  }
+  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1") return value;
+  if (!warned.has(name)) {
+    warned.add(name);
+    console.error(`[commerce] ${name} is set but not local; ignored in production`);
+  }
+  return undefined;
+}
+
+/** Any harness override present in the environment (even an ignored one), for the self-check and the admin page. */
+export function harnessOverridesPresent(): string[] {
+  return ["STRIPE_API_BASE", "PRINTFUL_API_URL", "PRINTIFY_API_URL", "POD_IDS_JSON"].filter((n) => Boolean(read(n)));
 }
 
 export function getEnv(): CommerceEnv {
@@ -54,6 +97,9 @@ export function getEnv(): CommerceEnv {
     resendApiKey: read("RESEND_API_KEY"),
     emailFrom: read("EMAIL_FROM"),
     siteUrl: read("NEXT_PUBLIC_SITE_URL"),
+    stripeApiBase: readHarnessUrl("STRIPE_API_BASE"),
+    printfulApiUrl: readHarnessUrl("PRINTFUL_API_URL"),
+    printifyApiUrl: readHarnessUrl("PRINTIFY_API_URL"),
   };
 }
 

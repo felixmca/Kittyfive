@@ -236,3 +236,173 @@ export function toSummary(
     ...(extra.pending ? { pending: true } : {}),
   };
 }
+
+// --- Admin reads (service role; the /api/admin/orders routes gate on is_admin()) ---
+
+export interface OrderEventRow {
+  id: number;
+  order_id: string | null;
+  type: string;
+  payload: unknown;
+  created_at: string;
+}
+
+export interface OrderWithItems {
+  order: OrderRow;
+  items: OrderItemRow[];
+}
+
+export interface OrderListRow extends OrderWithItems {
+  /** The newest order_events row for this order, or null when it has none. */
+  lastEvent: Pick<OrderEventRow, "type" | "created_at"> | null;
+  /** The provider holds it as a draft that nobody has confirmed (see needsConfirmFrom). */
+  needsConfirm: boolean;
+}
+
+/** The event types that say whether the provider's copy is a draft or in production. */
+const CONFIRM_EVENTS = new Set(["pod_submitted", "pod_draft_unconfirmed", "pod_confirmed"]);
+
+/**
+ * From an order's events (NEWEST FIRST): is the provider's order still an
+ * unconfirmed draft? True when the latest of pod_submitted /
+ * pod_draft_unconfirmed / pod_confirmed says sentToProduction false (or is
+ * the draft marker), false once a later pod_confirmed reports production.
+ */
+export function needsConfirmFrom(events: Array<Pick<OrderEventRow, "type" | "payload">>): boolean {
+  for (const ev of events) {
+    if (!CONFIRM_EVENTS.has(ev.type)) continue;
+    if (ev.type === "pod_draft_unconfirmed") return true;
+    const p = ev.payload && typeof ev.payload === "object" ? (ev.payload as Record<string, unknown>) : {};
+    return p.sentToProduction === false;
+  }
+  return false;
+}
+
+/** Hard cap on one admin page: the list is read whole into memory. */
+export const MAX_ORDER_LIST = 100;
+
+function clampLimit(limit: number | undefined, fallback: number): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) return fallback;
+  return Math.min(MAX_ORDER_LIST, Math.max(1, Math.floor(limit)));
+}
+
+/**
+ * Newest orders first, each with its items and its latest event. Three
+ * queries however many orders: orders, their items, their events (type and
+ * time only, newest first, first seen per order wins).
+ */
+export async function listOrders(opts: { limit?: number; status?: OrderStatus } = {}): Promise<OrderListRow[]> {
+  const db = getSupabaseAdmin();
+  const limit = clampLimit(opts.limit, 30);
+  let query = db.from("orders").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (opts.status) query = query.eq("status", opts.status);
+  const { data, error } = await query;
+  if (error) fail("list orders", error);
+  const orders = (data as OrderRow[] | null) ?? [];
+  if (!orders.length) return [];
+  const ids = orders.map((o) => o.id);
+
+  const [{ data: itemData, error: itemsError }, { data: eventData, error: eventsError }] = await Promise.all([
+    db.from("order_items").select("*").in("order_id", ids).order("id"),
+    db
+      .from("order_events")
+      .select("order_id, type, created_at, payload")
+      .in("order_id", ids)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(ids.length * 25),
+  ]);
+  if (itemsError) fail("list order_items", itemsError);
+  if (eventsError) fail("list order_events", eventsError);
+
+  const itemsByOrder = new Map<string, OrderItemRow[]>();
+  for (const item of (itemData as OrderItemRow[] | null) ?? []) {
+    const list = itemsByOrder.get(item.order_id) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.order_id, list);
+  }
+  const lastEventByOrder = new Map<string, Pick<OrderEventRow, "type" | "created_at">>();
+  const eventsByOrder = new Map<string, Array<Pick<OrderEventRow, "type" | "payload">>>();
+  for (const ev of (eventData as Array<Pick<OrderEventRow, "order_id" | "type" | "created_at" | "payload">> | null) ?? []) {
+    if (!ev.order_id) continue;
+    if (!lastEventByOrder.has(ev.order_id)) lastEventByOrder.set(ev.order_id, { type: ev.type, created_at: ev.created_at });
+    const list = eventsByOrder.get(ev.order_id) ?? [];
+    list.push({ type: ev.type, payload: ev.payload });
+    eventsByOrder.set(ev.order_id, list);
+  }
+  return orders.map((order) => ({
+    order,
+    items: itemsByOrder.get(order.id) ?? [],
+    lastEvent: lastEventByOrder.get(order.id) ?? null,
+    needsConfirm: Boolean(order.pod_order_id) && needsConfirmFrom(eventsByOrder.get(order.id) ?? []),
+  }));
+}
+
+export async function getOrderById(id: string): Promise<OrderWithItems | null> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("orders").select("*").eq("id", id).maybeSingle();
+  if (error) fail("select order by id", error);
+  if (!data) return null;
+  const order = data as OrderRow;
+  const items = await getOrderItems(order.id);
+  return { order, items };
+}
+
+/** An order's audit trail, newest first. */
+export async function listOrderEvents(orderId: string, limit = 20): Promise<OrderEventRow[]> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("order_events")
+    .select("*")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(clampLimit(limit, 20));
+  if (error) fail("list order_events for order", error);
+  return (data as OrderEventRow[] | null) ?? [];
+}
+
+/** What /admin shows per order: never the full address or the phone number. */
+export interface AdminOrderSummary {
+  id: string;
+  createdAt: string;
+  kind: OrderKind;
+  status: OrderStatus;
+  amountPence: number;
+  currency: string;
+  email: string | null;
+  name: string | null;
+  items: Array<Pick<OrderItemSummary, "name" | "variantLabel" | "quantity">>;
+  podProvider: string | null;
+  podOrderId: string | null;
+  tracking: Tracking | null;
+  processedAt: string | null;
+  lastEvent: { type: string; createdAt: string } | null;
+  /** The provider holds this order as a draft nobody has confirmed: it will not be made until someone does. */
+  needsConfirm: boolean;
+}
+
+export function toAdminSummary(
+  order: OrderRow,
+  items: ItemLike[],
+  lastEvent: Pick<OrderEventRow, "type" | "created_at"> | null,
+  needsConfirm = false,
+): AdminOrderSummary {
+  return {
+    id: order.id,
+    createdAt: order.created_at,
+    kind: order.kind,
+    status: order.status,
+    amountPence: order.amount_pence,
+    currency: order.currency,
+    email: order.email,
+    name: order.name,
+    items: describeItems(items).map(({ name, variantLabel, quantity }) => ({ name, variantLabel, quantity })),
+    podProvider: order.pod_provider,
+    podOrderId: order.pod_order_id,
+    tracking: order.tracking ?? null,
+    processedAt: order.processed_at,
+    lastEvent: lastEvent ? { type: lastEvent.type, createdAt: lastEvent.created_at } : null,
+    needsConfirm,
+  };
+}

@@ -11,7 +11,10 @@
     "predev": "node scripts/copy-decoders.mjs && node scripts/build-story.mjs",
     "prebuild": "node scripts/copy-decoders.mjs && node scripts/build-story.mjs",
     "story": "node scripts/build-story.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "verify:commerce": "node scripts/verify-commerce.mjs",
+    "printful": "node scripts/printful.mjs",
+    "print-files": "node scripts/print-files.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

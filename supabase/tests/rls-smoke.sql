@@ -271,6 +271,236 @@ begin
   end;
 end $$;
 
+-- ── commerce (REAL MONEY) ────────────────────────────────────────────────
+-- Orders are written by the Stripe webhook with the service role and by
+-- nobody else. First, as the privileged role, plant three snack orders (one
+-- paid, one cancelled, one failed), a merch order and an audit event; then
+-- see that a signed-in person and an anonymous visitor get nothing from the
+-- tables and only the counter from snacks_public, and that the audit log
+-- cannot be rewritten.
+reset role;
+do $$
+declare n integer; o uuid;
+begin
+  select s.count into n from public.snacks_public s;
+  perform set_config('rls.snacks_before', n::text, true);
+  insert into public.orders (stripe_session_id, kind, status, amount_pence, email, created_at, updated_at)
+  values ('cs_rls_snack_paid', 'snack', 'paid', 500, 'rls-buyer@example.com', now() - interval '1 day', now() - interval '1 day')
+  returning id into o;
+  insert into public.orders (stripe_session_id, kind, status, amount_pence)
+  values ('cs_rls_snack_cancelled', 'snack', 'cancelled', 500),
+         ('cs_rls_snack_failed', 'snack', 'failed', 500),
+         ('cs_rls_merch_paid', 'merch', 'paid', 2500);
+  insert into public.order_items (order_id, product_id, variant_id, quantity, unit_pence)
+  values (o, 'snack', 'snack', 1, 500);
+  insert into public.order_events (order_id, type, payload) values (o, 'rls.test', '{}'::jsonb);
+  perform set_config('rls.order_id', o::text, true);
+  -- The counter sees the paid snack and nothing else.
+  select s.count into n from public.snacks_public s;
+  if n <> current_setting('rls.snacks_before')::integer + 1 then
+    raise exception 'snacks_public counted % (expected one more than %)', n, current_setting('rls.snacks_before');
+  end if;
+  -- orders.updated_at follows every change (the row was planted a day old).
+  update public.orders set status = 'submitted' where id = o;
+  if (select updated_at from public.orders where id = o) <> now() then
+    raise exception 'orders.updated_at did not move';
+  end if;
+  -- The audit log is append-only, even for the privileged role.
+  begin
+    update public.order_events set type = 'rewritten' where order_id = o;
+    raise exception 'an order event was rewritten';
+  exception when raise_exception then
+    if sqlerrm <> 'order_events is append-only' then raise; end if;
+  end;
+  begin
+    delete from public.order_events where order_id = o;
+    raise exception 'an order event was deleted';
+  exception when raise_exception then
+    if sqlerrm <> 'order_events is append-only' then raise; end if;
+  end;
+end $$;
+
+-- A signed-in person (the admin, even) sees no order, writes no order.
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
+do $$
+declare n integer; o uuid := current_setting('rls.order_id')::uuid;
+begin
+  begin
+    select count(*) into n from public.orders;
+    if n <> 0 then raise exception 'a signed-in person can read % orders', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.order_items;
+    if n <> 0 then raise exception 'a signed-in person can read % order items', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.order_events;
+    if n <> 0 then raise exception 'a signed-in person can read % order events', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.orders (stripe_session_id, kind, amount_pence) values ('cs_rls_forged', 'snack', 0);
+    raise exception 'a signed-in person inserted an order';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.order_items (order_id, product_id, variant_id, quantity, unit_pence) values (o, 'x', 'x', 1, 0);
+    raise exception 'a signed-in person inserted an order item';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.order_events (order_id, type) values (o, 'forged');
+    raise exception 'a signed-in person inserted an order event';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.orders set status = 'delivered' where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'a signed-in person updated % orders', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.order_items set quantity = 99 where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'a signed-in person updated % order items', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.order_events set type = 'forged' where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'a signed-in person updated % order events', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.orders where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'a signed-in person deleted % orders', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.order_items where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'a signed-in person deleted % order items', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.order_events where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'a signed-in person deleted % order events', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  -- The counter is readable, and counts the paid snack only.
+  select s.count into n from public.snacks_public s;
+  if n <> current_setting('rls.snacks_before')::integer + 1 then
+    raise exception 'a signed-in person sees snacks_public = % (expected one more than %)', n, current_setting('rls.snacks_before');
+  end if;
+end $$;
+
+-- An anonymous visitor: the same nothing, and the same counter.
+reset role;
+set local role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+do $$
+declare n integer; o uuid := current_setting('rls.order_id')::uuid;
+begin
+  begin
+    select count(*) into n from public.orders;
+    if n <> 0 then raise exception 'anon can read % orders', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.order_items;
+    if n <> 0 then raise exception 'anon can read % order items', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.order_events;
+    if n <> 0 then raise exception 'anon can read % order events', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.orders (stripe_session_id, kind, amount_pence) values ('cs_rls_forged_anon', 'snack', 0);
+    raise exception 'anon inserted an order';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.order_items (order_id, product_id, variant_id, quantity, unit_pence) values (o, 'x', 'x', 1, 0);
+    raise exception 'anon inserted an order item';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.order_events (order_id, type) values (o, 'forged');
+    raise exception 'anon inserted an order event';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.orders set status = 'delivered' where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon updated % orders', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.order_items set quantity = 99 where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon updated % order items', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.order_events set type = 'forged' where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon updated % order events', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.orders where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon deleted % orders', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.order_items where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon deleted % order items', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.order_events where true;
+    get diagnostics n = row_count;
+    if n <> 0 then raise exception 'anon deleted % order events', n; end if;
+  exception when insufficient_privilege then null;
+  end;
+  select s.count into n from public.snacks_public s;
+  if n <> current_setting('rls.snacks_before')::integer + 1 then
+    raise exception 'anon sees snacks_public = % (expected one more than %)', n, current_setting('rls.snacks_before');
+  end if;
+  if (select last_created_at from public.snacks_public) is null then
+    raise exception 'snacks_public has no last_created_at';
+  end if;
+end $$;
+
+-- The one escape hatch: an erasure request (or test cleanup) may delete an
+-- event after set_config('app.allow_delete', '1', true), privileged role only.
+reset role;
+do $$
+declare n integer; o uuid := current_setting('rls.order_id')::uuid;
+begin
+  perform set_config('app.allow_delete', '1', true);
+  delete from public.order_events where order_id = o;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'allow_delete deleted % events (expected 1)', n; end if;
+  -- Still no rewriting, hatch or not.
+  insert into public.order_events (order_id, type) values (o, 'rls.test');
+  begin
+    update public.order_events set type = 'rewritten' where order_id = o;
+    raise exception 'an order event was rewritten with allow_delete set';
+  exception when raise_exception then
+    if sqlerrm <> 'order_events is append-only' then raise; end if;
+  end;
+end $$;
+
 reset role;
 select 'RLS smoke test passed' as result;
 rollback;

@@ -28,7 +28,8 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   shipped: "Shipped.",
   delivered: "Delivered.",
   cancelled: "Cancelled.",
-  failed: "Payment failed.",
+  // Also used when the maker fails the order after payment, so never "payment failed".
+  failed: "Something went wrong with this order. We will be in touch.",
 };
 
 export default async function CheckoutSuccessPage({ searchParams }: { searchParams: Promise<SearchParams> }) {

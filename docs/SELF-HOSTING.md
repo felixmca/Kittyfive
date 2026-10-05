@@ -63,7 +63,7 @@ Vercel → Settings → Environment Variables for the live site.
 | `RESEND_API_KEY`, `EMAIL_FROM` | Order emails and "new chapter" emails. Resend needs a domain you own and have verified; `vercel.app` addresses cannot send. |
 | `RESEND_WEBHOOK_SECRET` | Addresses that bounce or complain stop getting story emails (with the service role key). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Orders written by the Stripe webhook, and bounce handling. Never put it in a `NEXT_PUBLIC_` name. |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Real checkout. With `supabase/commerce.sql` run once. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Real checkout. The order tables come with the migrations in step 2 (`supabase/migrations/20261005080000_commerce.sql`). |
 | `PRINTFUL_*` (or `PRINTIFY_*`) | Orders go to print on demand. |
 | `SUPABASE_DB_URL` | Only on your computer, for `scripts/db.mjs` (the session pooler address from Supabase → Connect). |
 

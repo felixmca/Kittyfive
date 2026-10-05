@@ -13,6 +13,7 @@ import { findVariant, SHIPPING, SNACK } from "@/config/products";
 import { SITE } from "@/config/site";
 import { sendOrderConfirmation } from "./email";
 import { getEnv, hasEmail, hasPod, hasStripe, hasSupabase, isLive } from "./env";
+import { fulfil } from "./fulfilment";
 import {
   appendEvent,
   ensureOrderItems,
@@ -23,9 +24,7 @@ import {
   type NewOrder,
   type NewOrderItem,
   type OrderItemRow,
-  type OrderRow,
 } from "./orders";
-import { getPod, mapItemsToPod, toPodAddress } from "./pod";
 import {
   CommerceError,
   errorMessage,
@@ -43,8 +42,25 @@ export function getStripe(): Stripe {
   if (stripeClient) return stripeClient;
   const { stripeSecretKey } = getEnv();
   if (!stripeSecretKey) throw new CommerceError("Stripe is not configured", 503);
+  // STRIPE_API_BASE exists only for the verify harness (a mock Stripe on
+  // localhost); unset, the SDK talks to api.stripe.com as normal.
+  const base = getEnv().stripeApiBase;
+  let hostOverride: Pick<Stripe.StripeConfig, "host" | "port" | "protocol"> = {};
+  if (base) {
+    try {
+      const url = new URL(base);
+      hostOverride = {
+        host: url.hostname,
+        port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 80,
+        protocol: url.protocol === "https:" ? "https" : "http",
+      };
+    } catch {
+      console.error("[commerce] STRIPE_API_BASE is not a URL; ignoring it");
+    }
+  }
   stripeClient = new Stripe(stripeSecretKey, {
     appInfo: { name: "Kitty", url: SITE.url },
+    ...hostOverride,
   });
   return stripeClient;
 }
@@ -94,11 +110,18 @@ export function sessionToNewOrder(session: Stripe.Checkout.Session): { order: Ne
   } else if (meta.variantId) {
     const found = findVariant(meta.variantId);
     const quantity = Number.parseInt(meta.quantity ?? "1", 10) || 1;
+    // What the session actually charged per unit (amount_subtotal excludes
+    // shipping), so a price change in products.ts while a session is open
+    // never shows a wrong line on the success page or in the email.
+    const charged =
+      typeof session.amount_subtotal === "number" && session.amount_subtotal > 0
+        ? Math.round(session.amount_subtotal / quantity)
+        : null;
     items.push({
       product_id: meta.productId || found?.product.id || "unknown",
       variant_id: meta.variantId,
       quantity,
-      unit_pence: found?.product.pricePence ?? 0,
+      unit_pence: charged ?? found?.product.pricePence ?? 0,
     });
   }
 
@@ -139,62 +162,6 @@ function redactSession(session: Stripe.Checkout.Session) {
     created: session.created,
     livemode: session.livemode,
   };
-}
-
-/** Submit a paid merch order to the print provider. Never throws; records the outcome as events. */
-async function fulfil(order: OrderRow, items: OrderItemRow[]): Promise<OrderRow> {
-  if (order.pod_order_id) return order; // already submitted (this is a resumed retry)
-  const { mapped, unmapped } = mapItemsToPod(items);
-  if (unmapped.length) {
-    await appendEvent(order.id, "pod_unmapped", {
-      unmapped,
-      note: "No podProductId/podVariantId in src/config/products.ts; fulfil manually. Status stays paid.",
-    });
-    return order;
-  }
-  if (!order.address) {
-    await appendEvent(order.id, "pod_no_address", { note: "Session had no shipping address; fulfil manually." });
-    return order;
-  }
-  if (!hasPod()) {
-    await appendEvent(order.id, "pod_not_configured", {
-      note: "No print provider configured (set PRINTFUL_API_TOKEN + PRINTFUL_STORE_ID, or PRINTIFY_API_TOKEN + PRINTIFY_SHOP_ID); fulfil manually. Status stays paid.",
-    });
-    return order;
-  }
-  const pod = getPod();
-  let result: Awaited<ReturnType<typeof pod.createOrder>>;
-  try {
-    result = await pod.createOrder(
-      { id: order.id, stripeSessionId: order.stripe_session_id, email: order.email },
-      mapped,
-      toPodAddress(order.address, order.email, order.phone),
-    );
-  } catch (err) {
-    await appendEvent(order.id, "pod_failed", { provider: pod.name, message: errorMessage(err) });
-    console.error(`[commerce] pod.createOrder failed for ${order.id}:`, err);
-    return order;
-  }
-  // The provider now holds an order. Whatever happens next, its id must not be
-  // lost, or a later manual resubmission would print the order twice.
-  try {
-    const updated = await updateOrder(order.id, {
-      status: "submitted",
-      pod_provider: pod.name,
-      pod_order_id: result.providerOrderId,
-    });
-    await appendEvent(order.id, "pod_submitted", { provider: pod.name, ...result });
-    return updated;
-  } catch (err) {
-    await appendEvent(order.id, "pod_submitted_unrecorded", {
-      provider: pod.name,
-      providerOrderId: result.providerOrderId,
-      message: errorMessage(err),
-      note: "Provider accepted the order but the row update failed. Do NOT resubmit; set pod_order_id by hand.",
-    }).catch(() => undefined);
-    console.error(`[commerce] pod order ${result.providerOrderId} created but not recorded for ${order.id}:`, err);
-    return { ...order, pod_provider: pod.name, pod_order_id: result.providerOrderId };
-  }
 }
 
 /**
@@ -242,10 +209,19 @@ async function processPaidSession(rawSession: Stripe.Checkout.Session, eventType
         to: current.email,
         id: mail.id,
       });
-      await updateOrder(order.id, { processed_at: new Date().toISOString() });
+      // Mark it done, and re-assert what fulfil() established in case its own
+      // row update failed (pod_submitted_unrecorded): the provider id must
+      // land in the row, or the admin button would send the order again.
+      await updateOrder(order.id, {
+        processed_at: new Date().toISOString(),
+        ...(current.pod_order_id
+          ? { status: current.status, pod_provider: current.pod_provider, pod_order_id: current.pod_order_id }
+          : {}),
+      });
     } catch (err) {
-      // processed_at stays null, so Stripe's next retry (or a manual replay
-      // from the Dashboard) resumes from here.
+      // processed_at stays null. Stripe does not retry a 200, so what resumes
+      // from here is a manual resend from the Stripe Dashboard or the admin
+      // page's "Send to the maker" button (the Orders card flags the order).
       console.error(`[commerce] deferred fulfilment failed for ${order.id}:`, err);
       await appendEvent(order.id, "fulfilment_deferred_failed", { message: errorMessage(err) }).catch(() => undefined);
     }

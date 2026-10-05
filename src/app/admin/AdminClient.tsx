@@ -4,12 +4,13 @@
  * decides who that is (public.admins + is_admin(), which also requires a
  * confirmed email); this page only reflects it. Non-admins see a polite no.
  *
- * Kitty Tunables (how she talks in the store's chat), what is connected,
- * Kitty's book at a glance, and the setup steps that only the dashboard
- * owner can do.
+ * Kitty Tunables (how she talks in the store's chat), the orders and where
+ * each is with the maker, what is connected, Kitty's book at a glance, and
+ * the setup steps that only the dashboard owner can do.
  */
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
+import Orders from "@/components/admin/Orders";
 import StoryReports from "@/components/admin/StoryReports";
 import TunablesEditor from "@/components/admin/TunablesEditor";
 import Chrome from "@/components/chrome/Chrome";
@@ -21,10 +22,21 @@ interface Status {
   supabase: boolean;
   anthropic: boolean;
   stripe: boolean;
+  /** Printful token + store id: orders can go to the maker. */
   printful: boolean;
+  printfulToken: boolean;
+  printfulStore: boolean;
+  printify: boolean;
   resend: boolean;
   siteUrl: string | null;
   region: string | null;
+  pod: {
+    provider: "printful" | "printify" | null;
+    variants: number;
+    storeMapped: number;
+    catalogMapped: number;
+    siteUrlHttps: boolean;
+  };
 }
 
 interface BookCounts {
@@ -97,6 +109,9 @@ export default function AdminClient() {
         <Card title={`${pet?.name ?? SITE.name} Tunables`} wide>
           <TunablesEditor petId={pet?.id ?? null} petSlug={SITE.petSlug} petName={pet?.name ?? SITE.name} />
         </Card>
+        <Card title="Orders" wide>
+          <Orders live={auth.mode === "live"} />
+        </Card>
         <Card title={`${SITE.name}'s book`}>
           {book ? (
             <p className="text-[15px] text-fg/90">
@@ -124,7 +139,9 @@ export default function AdminClient() {
               <Service ok={status.supabase} name="Supabase (accounts, stories)" />
               <Service ok={status.anthropic} name="Claude (chat, chapter drafts)" />
               <Service ok={status.stripe} name="Stripe (checkout)" later="Phase 6" />
-              <Service ok={status.printful} name="Printful (print on demand)" later="Phase 6" />
+              <Printful token={status.printfulToken} store={status.printfulStore} />
+              {status.printify ? <Service ok name="Printify (fallback maker)" /> : null}
+              <PrintFiles pod={status.pod} />
               <Service ok={status.resend} name="Resend (email)" later="Phase 5" />
             </ul>
           ) : (
@@ -140,6 +157,15 @@ export default function AdminClient() {
               point at localhost.
             </li>
             <li>Before public sign-ups: send auth email through Resend (the built-in mailer manages about two an hour).</li>
+            <li>
+              Printful → Stores → Connect via API: create the manual-order store, then put its id in{" "}
+              <code>PRINTFUL_STORE_ID</code> (Vercel and <code>.env.local</code>) and run <code>npm run printful products sync</code>.
+              Until then, paid merch orders wait at <em>paid</em> and the Orders card says so.
+            </li>
+            <li>
+              <code>SUPABASE_SERVICE_ROLE_KEY</code> + <code>STRIPE_WEBHOOK_SECRET</code> in Vercel Production switch the store to
+              live: real Stripe sessions, orders written to Supabase.
+            </li>
           </ol>
         </Card>
       </div>
@@ -175,6 +201,33 @@ function Service({ ok, name, later }: { ok: boolean; name: string; later?: strin
     <li className="flex items-center justify-between gap-3">
       <span className="text-fg/90">{name}</span>
       <span className={ok ? "text-emerald-300" : "text-muted"}>{ok ? "connected" : later ? `not yet (${later})` : "missing"}</span>
+    </li>
+  );
+}
+
+/** Printful in three states: connected, token but no store yet, nothing. */
+function Printful({ token, store }: { token: boolean; store: boolean }) {
+  const ok = token && store;
+  return (
+    <li className="flex items-start justify-between gap-3" data-service-printful={ok ? "connected" : token ? "token-only" : "none"}>
+      <span className="shrink-0 text-fg/90">Printful (the maker)</span>
+      <span className={`text-right ${ok ? "text-emerald-300" : token ? "text-amber-200" : "text-muted"}`}>
+        {ok ? "connected" : token ? "token only — no store id yet (Printful → Stores → Connect via API)" : "not yet"}
+      </span>
+    </li>
+  );
+}
+
+/** How many of the store's variants the maker can make, and whether it can fetch the print files. */
+function PrintFiles({ pod }: { pod: Status["pod"] }) {
+  const ready = pod.catalogMapped === pod.variants && pod.siteUrlHttps;
+  return (
+    <li className="flex items-start justify-between gap-3" data-service-print-files>
+      <span className="shrink-0 text-fg/90">Print files</span>
+      <span className={`text-right ${ready ? "text-emerald-300" : "text-amber-200"}`}>
+        {pod.catalogMapped}/{pod.variants} blueprints · {pod.storeMapped}/{pod.variants} store ids ·{" "}
+        {pod.siteUrlHttps ? "site URL is https" : "NEXT_PUBLIC_SITE_URL is not https, so the maker cannot fetch them"}
+      </span>
     </li>
   );
 }
