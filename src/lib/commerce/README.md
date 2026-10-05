@@ -20,12 +20,12 @@ services) plus the Orders card (section 4c).
 | File | Role |
 |---|---|
 | `types.ts` | `Commerce` interface, `CommerceError`, `validateQuantity`, `OrderStatus` |
-| `env.ts` | reads env, `isLive()`, `hasPrintful()` / `hasPrintify()` / `hasPod()` |
+| `env.ts` | reads env, `isLive()`, `hasPrintful()` / `hasPrintify()` / `hasPod()`, `isDeployed()`, `harnessOverridesPresent()` (the harness base URLs are honoured in production only when they point at localhost) |
 | `index.ts` | `getCommerce()`: live if `isLive()` else demo; `status()` |
-| `stripe.ts` | live implementation (Checkout Sessions, webhook, deferred fulfilment + email) |
+| `stripe.ts` | live implementation (Checkout Sessions, webhook, deferred fulfilment + email; the last update sets `processed_at` and re-asserts the provider id) |
 | `demo.ts` | in-memory implementation |
-| `orders.ts` | Supabase reads and writes: idempotent insert, status updates, append-only events, admin list |
-| `fulfilment.ts` | `fulfil(order, items)`: paid merch order → provider order; never throws, every outcome is an event |
+| `orders.ts` | Supabase reads and writes: idempotent insert, status updates, append-only events, admin list with `needsConfirm` |
+| `fulfilment.ts` | `fulfil(order, items, { force? })`: paid merch order → provider order; claims the row first, never throws, every outcome is an event |
 | `supabaseAdmin.ts` | service-role client, server-only (throws if imported in a browser) |
 | `pod/types.ts` | provider contract (`PodProvider`), `mapItemsToPod()` (the id resolution order), `toPodAddress()` |
 | `pod/index.ts` | `getPod()`: Printful if its pair is set, else Printify if its pair is set, else demo |
@@ -42,12 +42,15 @@ services) plus the Orders card (section 4c).
 | `scripts/print-files.mjs` | writes and checks the three print files in `public/print/` (`npm run print-files`) |
 | `scripts/pod-ids.mjs` | lists a provider's store ids; `--write` records them in `pod-ids.json` (the Printify path) |
 | `scripts/stripe-selftest.mjs` | proves a Stripe **test** key builds Kitty's Checkout Session; refuses a live key |
+| `scripts/verify-commerce.mjs` + `scripts/commerce-mocks.mjs` | the commerce harness (`npm run verify:commerce`, section 7): mock Stripe, Supabase, Printful and Printify on 127.0.0.1 driving the production build |
 | `supabase/migrations/20261005080000_commerce.sql` | `orders`, `order_items`, `order_events`, `snacks_public` (applied to Kittyfive on 5 Oct 2026) |
 
 Routes: `POST /api/checkout`, `POST /api/snack`, `POST /api/webhooks/stripe`,
 `POST /api/webhooks/pod`, `GET /api/commerce/status`, and for admins
 `GET /api/admin/orders`, `POST /api/admin/orders/{id}`, `GET /api/admin/status`.
-Page: `/checkout/success`. Components: `components/commerce/DemoBanner.tsx`,
+Page: `/checkout/success` (its `failed` label reads "Something went wrong with
+this order. We will be in touch.", because a provider failure after payment is
+not a payment failure). Components: `components/commerce/DemoBanner.tsx`,
 `components/commerce/SnackButton.tsx`, `components/admin/Orders.tsx`.
 
 ## 1. Stripe
@@ -68,7 +71,9 @@ Page: `/checkout/success`. Components: `components/commerce/DemoBanner.tsx`,
    ```
 
    Copy the `whsec_…` it prints into `.env.local` as `STRIPE_WEBHOOK_SECRET`.
-   (Use whatever port `next dev` is actually on; the verify harness uses 3200.)
+   (Use whatever port `next dev` is actually on; 3200 is the one this project
+   uses. The harnesses have their own: 3201 for `scripts/verify.mjs`, 3202 and
+   3203 for `scripts/verify-commerce.mjs`.)
 5. Production webhook: Developers → Webhooks → Add endpoint →
    `https://<your-domain>/api/webhooks/stripe`, events:
    `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
@@ -128,7 +133,13 @@ EMAIL_FROM=Kitty <kitty@yourdomain>                  # optional; domain must be 
 Never set in a real deployment: `STRIPE_API_BASE`, `PRINTFUL_API_URL`,
 `PRINTIFY_API_URL` (base-URL overrides) and `POD_IDS_JSON` (replaces
 `pod-ids.json`). They exist only for the verify harness, which points the
-adapters at mock servers on localhost (section 7).
+adapters at mock servers on 127.0.0.1 (section 7). The code also defends
+itself: in a production build (`NODE_ENV=production` or `VERCEL` set) the three
+base URLs are honoured only when their hostname is `localhost` or `127.0.0.1`,
+otherwise ignored with one `console.error`; `POD_IDS_JSON` is ignored whenever
+`VERCEL` is set. The self-check reports any of the four as
+`env.noHarnessOverrides`, and `/api/admin/status` lists them under `overrides`
+(an empty list is the right answer on the live site).
 
 ## 4. Print provider: Printful (UK primary) or Printify (fallback)
 
@@ -162,16 +173,28 @@ product has been created in the store. `products sync` (4a) is still worth
 doing: a sync product carries the retail price and a thumbnail, and its mockups
 show up in the Printful dashboard.
 
+Before the provider is called the order is **claimed**: one conditional
+update sets `orders.pod_provider` where `id` matches, `pod_order_id` is null
+and (unless `force`) `pod_provider` is null, asking for the updated row back.
+One row back means this run holds the order; none means another run does (a
+Stripe retry racing the first delivery, or the admin button racing the
+webhook), and nothing is sent. A provider failure releases the claim (sets
+`pod_provider` back to null where `pod_order_id` is still null) so a retry is
+possible. The admin button passes `force: true` after the webhook's 90 s grace
+(4c), so a claim left by a run that died never blocks an order for good.
+
 `fulfil` never throws. Every outcome is an `order_events` row:
 
 | Event | Meaning | Order status |
 |---|---|---|
 | `pod_not_configured` | no provider pair in env | stays `paid` |
-| `pod_unmapped` | some variant has no ids and no https catalog mapping (lists them) | stays `paid` |
+| `pod_unmapped` | some variant has no ids and no https catalog mapping (lists them); also an order with no items at all (`unmapped: []`), which never reaches the provider | stays `paid` |
 | `pod_no_address` | the Stripe session had no shipping address | stays `paid` |
-| `pod_failed` | the provider refused or timed out (message saved) | stays `paid` |
+| `pod_claimed_elsewhere` | another fulfilment run holds the claim (or the order already has a provider id); nothing was sent | stays `paid` |
+| `pod_failed` | the provider refused or timed out (message saved), or the claim itself could not be written; the claim is released | stays `paid` |
 | `pod_submitted` | provider order created; payload has `providerOrderId`, `sentToProduction`, `note` | `submitted` |
-| `pod_submitted_unrecorded` | provider accepted but our row update failed: set `pod_order_id` by hand, do **not** resubmit | stays `paid` |
+| `pod_draft_unconfirmed` | appended right after `pod_submitted` when `sentToProduction` is false (`PRINTFUL_CONFIRM=0`, or the confirm failed): the provider holds a draft nobody has confirmed; payload `{ provider, providerOrderId, note }` | `submitted` |
+| `pod_submitted_unrecorded` | provider accepted but our row update failed: set `pod_order_id` by hand, do **not** resubmit. `fulfil` still returns the order as `submitted` with the provider id, and the Stripe webhook's final update writes it into the row | stays `paid` until that update lands |
 
 An order that already has `pod_order_id` is never resubmitted. The `/admin`
 Orders card (4c) runs the same `fulfil` for orders left at `paid`.
@@ -209,7 +232,8 @@ printed):
    (`external_id` makes it idempotent: a second run is a PUT with the same
    ids) and writes `src/config/pod-ids.json` `{ provider: "printful", storeId,
    generatedAt, variants: { "<our id>": { productId, variantId } } }`. Commit
-   it. `node scripts/pod-ids.mjs --write` does the same from an existing
+   it (the build imports the file, so the empty placeholder is committed too).
+   `node scripts/pod-ids.mjs --write` does the same from an existing
    store (matching by the sync variants' `external_id`, or `--map=` for
    products made by hand).
 6. **Webhook.** Put a long random `PRINTFUL_WEBHOOK_SECRET` in `.env.local` and
@@ -225,16 +249,20 @@ Order flow (`pod/printful.ts`, API v1; v2 is still Open Beta). Headers
 
 1. `POST /orders` with `{ external_id, shipping: "STANDARD", recipient: { name,
    address1, address2?, city, state_code?, country_code, zip, phone?, email? },
-   items }`. Items are `{ sync_variant_id, quantity }` for store-mapped
-   variants or `{ variant_id, quantity, files: [{ type: <placement>, url }],
-   options?: [{ id, value }] }` for catalog-mapped ones. This creates a
-   **draft** (no `confirm` query parameter).
+   items }`. `recipient.name` is the full name as the customer typed it
+   (`PodAddress.fullName`), so a one-word name like "Prince" is sent once, not
+   as "Prince Prince". Items are `{ sync_variant_id, quantity }` for
+   store-mapped variants or `{ variant_id, quantity, files: [{ type:
+   <placement>, url }], options?: [{ id, value }] }` for catalog-mapped ones.
+   This creates a **draft** (no `confirm` query parameter).
 2. Unless `PRINTFUL_CONFIRM=0`, `POST /orders/{id}/confirm` as a second call.
    Success: `sentToProduction: true`. Failure (typically no billing method):
    the draft is kept, `sentToProduction: false`, Printful's message in the
    event's `note`, nothing thrown. Confirm it later from `/admin` ("Confirm at
-   Printful"), `node scripts/printful.mjs orders confirm <id>`, or the Printful
-   dashboard. With `PRINTFUL_CONFIRM=0` the note reads `draft: PRINTFUL_CONFIRM=0`.
+   Printful"), `node scripts/printful.mjs orders confirm <id> --yes` (it
+   charges the Printful card, so without `--yes` it only shows the order and
+   stops), or the Printful dashboard. With `PRINTFUL_CONFIRM=0` the note reads
+   `draft: PRINTFUL_CONFIRM=0`.
 3. `external_id` must be at most 32 characters of `[A-Za-z0-9_-]` (Printful's
    rule). A Stripe Checkout session id is about 66, so the adapter uses the
    Stripe id only when it fits and otherwise our order uuid without dashes
@@ -242,8 +270,13 @@ Order flow (`pod/printful.ts`, API v1; v2 is still Open Beta). Headers
 4. If `POST /orders` fails, the adapter looks the order up with
    `GET /orders/@{external_id}`; if it exists (a Stripe retry, or a timeout
    after Printful created it) that id is returned instead of printing twice,
-   with `note: recovered existing order by external_id (status …)`.
-5. A 429 waits `Retry-After` seconds (2 s default, 10 s cap) and retries once;
+   with `note: recovered existing order by external_id (status …)`. A recovered
+   order that is still a `draft` is then confirmed like a new one when confirm
+   is on (`sentToProduction: true`, note `…; confirmed`; a failed confirm
+   gives `sentToProduction: false` and `…; confirm failed: <message>`); with
+   `PRINTFUL_CONFIRM=0` it stays a draft. A recovered order in any other
+   status is reported as already in production.
+5. A 429 waits `Retry-After` seconds (2 s default, 5 s cap) and retries once;
    calls time out after 15 s. A second 429 surfaces as `pod_failed`.
 
 Reading back: `getOrder(id)` → `GET /orders/{id}`; `confirmOrder(id)` →
@@ -251,26 +284,35 @@ Reading back: `getOrder(id)` → `GET /orders/{id}`; `confirmOrder(id)` →
 `in_production`, `fulfilled` → `shipped`, `canceled` → `cancelled`, `failed` →
 `failed`; `draft`, `inreview`, `pending`, `onhold`, `partial`, `archived` only
 log. Tracking is read from `shipments[0]` (`carrier`/`service`,
-`tracking_number`, `tracking_url`).
+`tracking_number`, `tracking_url`); a `tracking_url` that is not `http(s)` is
+dropped, because the success page renders it as a link.
 
 Webhook: **Printful v1 webhooks are not signed**, so the secret rides in the
 URL; the route copies it into the `x-printful-webhook-secret` header and the
 adapter requires it to equal `PRINTFUL_WEBHOOK_SECRET` (constant-time compare;
 401 otherwise). A body whose `store` is not our store id is ignored with a
-warning. `package_shipped` → status `shipped`, tracking saved, customer
-emailed; `order_canceled` → `cancelled`; `order_failed` → `failed`;
-`order_updated` → the mapped status, if any; the rest are logged against the
-order. Status only ever moves forward (`paid` → `submitted` →
+warning. `package_shipped` → status `shipped`, tracking saved;
+`order_canceled` → `cancelled`; `order_failed` → `failed`; `order_updated` →
+the mapped status, if any (`fulfilled` is `shipped` too); the rest are logged
+against the order. Status only ever moves forward (`paid` → `submitted` →
 `in_production` → `shipped` → `delivered`); `cancelled` / `failed` are accepted
-unless the order is `delivered`.
+unless the order is `delivered`. The shipped email goes out on the
+**transition** to `shipped`, whichever event carried it first
+(`order_updated` with status `fulfilled`, or `package_shipped`, which Printful
+sends in no fixed order) and never twice; the same rule applies to "Refresh
+from the maker" on `/admin` (4c).
 
 Operator CLI, all of it: `node scripts/printful.mjs status | catalog |
 printfiles | products sync [--dry-run] [--allow-http] | webhooks list |
 register <https site> | clear | orders list [--status=…] [--full] | orders get
-<id> | orders confirm <id> | orders cancel <id> --yes | selftest`, each with
-`--json` for machine output. `selftest` needs no network (blueprints cover
-every variant, fit maths, print files present). `--allow-http` exists only for
-a local experiment; Printful cannot fetch from localhost anyway.
+<id> | orders confirm <id> --yes | orders cancel <id> --yes | selftest`, each
+with `--json` for machine output. `orders confirm` shows the order and stops
+unless `--yes` is given, because confirming charges the Printful card on file.
+Every error message passes through the same mask as `webhooks list`, so a
+webhook URL's `?secret=` never reaches the terminal. `selftest` needs no
+network (blueprints cover every variant, fit maths, print files present).
+`--allow-http` exists only for a local experiment; Printful cannot fetch from
+localhost anyway.
 
 ### 4b. Printify (fallback)
 
@@ -300,9 +342,14 @@ a local experiment; Printful cannot fetch from localhost anyway.
    `/admin` "Send to production" or `confirmOrder` does it later). `getOrder`
    reads `GET …/orders/{id}.json`: `in-production` / `sending-to-production` →
    `in_production`, `fulfilled` → `shipped`, `canceled` → `cancelled`, tracking
-   from `shipments[0]` `{ carrier, number, url }`. A 429 is retried once after
-   `Retry-After`. Printify charges the card on file in Printify for the base
-   cost + shipping.
+   from `shipments[0]` `{ carrier, number, url }` (a `url` that is not
+   `http(s)` is dropped). A 429 is retried once after `Retry-After` (5 s cap).
+   If `POST …/orders.json` fails, the adapter reads
+   `GET …/orders.json?limit=50` and, if an order with the same `external_id`
+   (the Stripe session id) is there, returns it with `note: recovered existing
+   order by external_id (status …)` instead of ordering twice; `pending`,
+   `on-hold` and `payment-not-received` count as not yet in production.
+   Printify charges the card on file in Printify for the base cost + shipping.
 5. Shipment webhook: Printify → My account → Connections → Webhooks (or
    `POST /v1/shops/{shop_id}/webhooks.json` with `{ topic, url, secret }`), URL
    `https://<your-domain>/api/webhooks/pod`, topics `order:shipment:created`,
@@ -316,27 +363,44 @@ a local experiment; Printful cannot fetch from localhost anyway.
 
 `GET /api/admin/orders?limit=30[&status=]` (bearer token → `is_admin()`, like
 `/api/admin/status`; 503 without `SUPABASE_SERVICE_ROLE_KEY`) lists the newest
-orders with items, provider id, tracking and the latest event, never the full
-address or phone. It also says which provider is live and whether it offers
-confirm / refresh, so the card shows only buttons that can do something.
+orders with items, provider id, tracking, `processedAt`, the latest event and
+`needsConfirm`, never the full address or phone. `needsConfirm` is read from
+the newest of the order's `pod_submitted` / `pod_draft_unconfirmed` /
+`pod_confirmed` events: true while the provider's copy is a draft nobody has
+confirmed, false once a `pod_confirmed` reports production. The response also
+says which provider is live and whether it offers confirm / refresh, so the
+card shows only buttons that can do something.
 
-`POST /api/admin/orders/{id}` with `{ "action": "fulfil" | "confirm" | "refresh" }`:
+Two chips on a row besides its status: **draft: not confirmed** when
+`needsConfirm` is true (the order will not be made until someone confirms it),
+and **fulfilment did not finish** when `processed_at` is still empty two
+minutes after the order was created (the Stripe webhook's deferred work died;
+read `last:` and use Send to the maker).
+
+`POST /api/admin/orders/{id}` with `{ "action": "fulfil" | "confirm" | "refresh" }`
+(`maxDuration` 60 s, the same budget as the Stripe webhook):
 
 - **Send to the maker** (`fulfil`): a merch order at `paid` with no provider id.
-  Runs `fulfil()` exactly as the webhook would. Refused (409) for 90 s after
-  the order is created while `processed_at` is null, so it cannot race the
-  Stripe webhook's deferred fulfilment into a second provider order. Events:
-  `admin_fulfil`, then whatever `fulfil` records.
-- **Confirm at Printful** / **Send to production** (`confirm`): a `submitted`
-  order with a provider id, when the live provider matches the order's and
-  implements `confirmOrder`. Events: `pod_confirmed` or `pod_confirm_failed`
-  (with the provider's message). Status stays `submitted`; refresh moves it.
+  Runs `fulfil()` exactly as the webhook would, with `force: true`, so a claim
+  left behind by a run that died (`pod_provider` set, no `pod_order_id`) is
+  taken over. Refused (409) for 90 s after the order is created while
+  `processed_at` is null, so it cannot race the Stripe webhook's deferred
+  fulfilment into a second provider order. Events: `admin_fulfil`, then
+  whatever `fulfil` records.
+- **Confirm at Printful** / **Send to production** (`confirm`): shown only for
+  a `submitted` order with a provider id and `needsConfirm`, when the live
+  provider matches the order's and implements `confirmOrder`. Events:
+  `pod_confirmed` or `pod_confirm_failed` (with the provider's message).
+  Status stays `submitted`; refresh moves it.
 - **Refresh from the maker** (`refresh`): reads the order back with `getOrder`
   and moves status forward by the same rule as the webhook, or fills in
-  tracking. Events: `pod_refreshed` `{ providerStatus, status, tracking }` or
-  `pod_refresh_failed`.
+  tracking. When that moves the order to `shipped`, the shipped email is sent
+  then (once; the pod webhook will not send it again). Events: `pod_refreshed`
+  `{ providerStatus, status, tracking }` or `pod_refresh_failed`, plus
+  `email_shipped_sent` / `email_shipped_skipped` on the transition.
 
-In demo mode the card renders "Demo mode: no orders." and makes no request.
+In demo mode the card renders "Demo mode: no orders." and makes no request
+(`npm run verify`'s admin journey checks exactly that).
 Connected services shows Printful as connected / token only / not yet, and a
 "Print files" line: how many variants have a blueprint, how many have store
 ids for the configured store, and whether `NEXT_PUBLIC_SITE_URL` is https.
@@ -344,8 +408,10 @@ ids for the configured store, and whether `NEXT_PUBLIC_SITE_URL` is https.
 ## 5. Email (Resend)
 
 Set `RESEND_API_KEY` and `EMAIL_FROM` (a verified domain in Resend). Two mails:
-order confirmation (from the Stripe webhook) and shipped-with-tracking (from the
-print provider's webhook). Without the keys, both are logged to the server console.
+order confirmation (from the Stripe webhook) and shipped-with-tracking (sent
+once, on the transition to `shipped`, by whichever learns of it first: the
+print provider's webhook or "Refresh from the maker" on `/admin`). Without the
+keys, both are logged to the server console.
 Stripe also sends its own receipt if you enable it under Settings → Emails.
 
 ## 6. Fee maths for the £1 snack
@@ -390,28 +456,46 @@ Config only (no app, no store needed): `node scripts/printful.mjs selftest`
 
 Live (test keys): open `/store`, press Buy, pay with `4242…`, land on
 `/checkout/success?session_id=cs_test_…`, then check `orders`, `order_items`
-and `order_events` in Supabase, and the Orders card on `/admin`. With
-`PRINTFUL_CONFIRM=0` the Printful order is a draft: `node scripts/printful.mjs
-orders list --status=draft`, then `orders cancel <id> --yes` so it is never
-produced. `stripe trigger checkout.session.completed` also works but carries no
-metadata, so it records an order of kind `merch` with no items (harmless;
-useful for signature checks).
+and `order_events` in Supabase, and the Orders card on `/admin`. Keep
+`NEXT_PUBLIC_SITE_URL=https://kittyfive.vercel.app` in `.env.local` for this
+(the print-file URLs in a catalog order are built from it): `origin.ts` sends
+a request whose Host is `localhost`, `127.0.0.1` or `[::1]` back to that host
+(http unless `x-forwarded-proto` says otherwise) before it looks at
+`NEXT_PUBLIC_SITE_URL`, so Stripe still returns you to
+`localhost:3200/checkout/success`. With `PRINTFUL_CONFIRM=0` the Printful
+order is a draft: the `/admin` row carries the **draft: not confirmed** chip,
+`node scripts/printful.mjs orders list --status=draft` shows the same id, then
+`orders cancel <id> --yes` so it is never produced. `stripe trigger
+checkout.session.completed` also works but carries no metadata, so it records
+an order of kind `merch` with no items (harmless; it ends as `pod_unmapped`
+with `unmapped: []` and is useful for signature checks).
 
-Harness: `npm run verify:commerce` (`scripts/verify-commerce.mjs`) stands up
-mock Stripe, Printful and Printify servers on localhost and points the app at
-them through `STRIPE_API_BASE`, `PRINTFUL_API_URL` (the mock serves `/orders`,
-`/orders/{id}/confirm`, `/orders/@{external_id}`, `/orders/{id}`),
-`PRINTIFY_API_URL` (replaces the whole `https://api.printify.com/v1` base, so
-the mock serves `/shops/…` directly) and `POD_IDS_JSON`. It proves Stripe →
-Supabase → provider → webhooks → emails without a real token or store.
+Harness: `npm run verify:commerce` (`scripts/verify-commerce.mjs`, with
+`scripts/commerce-mocks.mjs`) stands up mock Stripe, Supabase (PostgREST),
+Printful and Printify servers on 127.0.0.1 and starts the real production
+build on ports 3202 (the Printful run) and 3203 (the Printify run) with every
+commerce variable set explicitly, so nothing in `.env.local` reaches a run. It
+points the app at the mocks through `STRIPE_API_BASE`, `PRINTFUL_API_URL` (the
+mock serves `/orders`, `/orders/{id}/confirm`, `/orders/@{external_id}`,
+`/orders/{id}`), `PRINTIFY_API_URL` (replaces the whole
+`https://api.printify.com/v1` base, so the mock serves `/shops/…` directly) and
+`POD_IDS_JSON`. It proves Stripe → Supabase → provider → webhooks → emails
+without a real token or store, and it passes with no keys at all. It rebuilds
+`.next` when anything under `src/` (or `next.config.ts`, `package.json`) is
+newer than `.next/BUILD_ID`; `npm run verify:commerce -- --no-build` skips
+that, `-- --build` forces it, `-- --only=printful` / `--only=printify` runs one
+provider. Results land in `.verify/commerce-results.json`, each run's site
+output in `.verify/commerce-site-<run>.log`; exit 1 on any failure.
 
 ## Known limits
 
 - Order + items are two inserts, not one transaction. If the second fails the
   webhook returns 500, Stripe retries, and the retry resumes: it inserts the
-  missing items, runs fulfilment and email, then sets `orders.processed_at`.
-  Only a delivery for an order whose `processed_at` is set is answered as a
-  duplicate. Fulfilment and email run in `after()` once the 200 is sent, so a
+  missing items, runs fulfilment and email, then sets `orders.processed_at`
+  (re-asserting `status`, `pod_provider` and `pod_order_id` in the same update
+  when fulfilment returned a provider id, so an unrecorded submission still
+  lands in the row). Only a delivery for an order whose `processed_at` is set
+  is answered as a duplicate. Fulfilment and email run in `after()` once the 200 is sent, so a
   slow print provider never stalls the Checkout redirect.
 - Rate limits are per instance and in memory (`src/lib/rateLimit.ts`):
   30 chat calls, 12 checkouts and 12 snacks per IP per 10 minutes. Move to
@@ -423,14 +507,17 @@ Supabase → provider → webhooks → emails without a real token or store.
   `?secret=<PRINTFUL_WEBHOOK_SECRET>`. In live mode the pod webhook refuses to
   run at all (503) until the active provider has a secret configured.
 - Printful confirm needs a billing method on the Printful account. Until there
-  is one, every order is created as a draft and `pod_submitted` carries
-  `sentToProduction: false` with Printful's message; nothing is lost, but
-  nothing is printed either until someone confirms.
+  is one, every order is created as a draft, `pod_submitted` carries
+  `sentToProduction: false` with Printful's message and a
+  `pod_draft_unconfirmed` event follows; `/admin` shows the row as "draft: not
+  confirmed". Nothing is lost, but nothing is printed either until someone
+  confirms.
 - Catalog orders need an https `NEXT_PUBLIC_SITE_URL` and the `/print` files
   deployed. `selfcheck.ts` (`printful.catalogOrderNeedsHttpsSiteUrl`) and the
   Print files line on `/admin` show this.
-- A 429 from either provider is retried once. A sustained 429 is `pod_failed`
-  and the admin resubmits.
+- A 429 from either provider is retried once, after `Retry-After` capped at
+  5 s. A sustained 429 is `pod_failed`, the claim is released, and the admin
+  resubmits.
 - The cap blueprint sends the generic `thread_colors` option, which the live
   catalog did not list for product 206 (it lists `thread_colors_3d`,
   `thread_colors_front_large` and others). `catalog` prints a WARN, not a
@@ -438,4 +525,9 @@ Supabase → provider → webhooks → emails without a real token or store.
   If a sync or order is rejected on it, drop or rename that line in
   `src/config/printful.ts`.
 - One variant per Checkout Session (the store buys one thing at a time by design).
+- `order_items.unit_pence` is what the session charged per unit
+  (`session.amount_subtotal / quantity`, which excludes shipping), falling back
+  to `products.ts` only when Stripe reports no subtotal, so a price change
+  while a session is open never shows a wrong line on the success page or in
+  the email.
 - Refunds are handled in the Stripe dashboard; the DB is not updated on refund.

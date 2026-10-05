@@ -38,7 +38,7 @@ The three pillars, in Kitty's words:
 | **3 · The Store** | Stylised, animated 3D living room + garden, Kitty tour, products, chat with Kitty + Kitty Tunables | Room, garden and Kitty photos ([Handover 04](HANDOVER-04-STORE-PHOTOS.md)) | 🟡 chat on the real key + Kitty Tunables live; day/evening, garden, wandering Kitty with the camera following, adaptive resolution (1.7 s to first picture on emulated 4G); the Blender house waits for the photos |
 | **4 · Real try-on** | 3D cap on the head, garments warped to the body with real shading | Try the cap (`/try-on?cap3d=1`) and the hoodie (`/try-on?fit=1`) | 🟡 3D cap and fitted garments built behind switches; waiting on a real person |
 | **5 · Subscribe by email** | Accounts subscribe to a pet's stories; new chapter → email | A domain for sending mail; Resend | 🟡 built and verified in demo mode (23 Sep); sending off until the domain |
-| **6 · Kitty's store takes money** | Printful UK, Stripe live, order emails | Stripe, Printful, Vercel Pro, Supabase Pro | ⬜ |
+| **6 · Kitty's store takes money** | Printful UK, Stripe live, order emails | Printful store id + billing, Stripe live keys, Vercel Pro, Supabase Pro | 🟡 wired and verified against mocks and the live catalog (5 Oct); waiting on the Printful store, its billing method and the Vercel env ([Handover 06](HANDOVER-06-PRINTFUL.md)) |
 | **7 · Your pet, your story** | Anyone signs up and makes their own pet's stories | Licence choice; generation budget | 🟡 self-hosting guide written (23 Sep); onboarding waits on the licence and hosting decisions |
 | **8 · Stores for everyone** | £19/month store subscription with payouts | Stripe Billing + Connect | ⬜ |
 | **9 · WhatsApp tier** | New chapters by WhatsApp for subscribers | WhatsApp Business number | ⬜ |
@@ -101,7 +101,8 @@ and four swipes carry it through the whole story with no seams.
       the Supabase MCP and mirrored as files): `profiles`, `admins` +
       `is_admin()`, `pets`, `volumes`, `chapters`, `chapter_scenes`, storage
       bucket `story-media`. RLS on everything; smoke test in `supabase/tests/`.
-      (Commerce tables wait for Phase 6: `supabase/commerce.sql`)
+      (Commerce tables: `supabase/migrations/20261005080000_commerce.sql`,
+      applied 5 Oct 2026)
 - [x] Auth like Birthday Lobby: email + password, confirm email, forgotten
       password, set new password, sign out. `/account`
 - [x] Admin: Felix's address in `admins` (seeded in the database, not the public
@@ -277,13 +278,64 @@ live, sending answers 503 until `RESEND_API_KEY` + `EMAIL_FROM` are set.)*
 
 ## Phase 6 · Kitty's store takes real money
 
-The commerce code is already built and runs in demo mode (see Decisions).
-- [ ] Printful UK products (cap, hoodie embroidery; long-sleeve DTG or a
-      screen-print pre-order batch with 3rd Rail Clothing, SE16)
-- [ ] Stripe live keys, webhook, Supabase secret key on Vercel
+Wired on 5 Oct 2026 against Printful's API (v1) and verified against local
+mocks and the live catalog; what is left needs Felix's accounts. The ordered
+runbook is [GO-LIVE.md](GO-LIVE.md); the log and the note for Felix are
+[Handover 06](HANDOVER-06-PRINTFUL.md).
+
+**Code**
+- [x] Printful adapter (`src/lib/commerce/pod/printful.ts`): draft, then
+      confirm as a second call (a confirm failure keeps the draft), recovery
+      by `@external_id` so a retry never prints twice, one retry on 429,
+      read-back and confirm for the admin page; Printify brought level; the
+      provider is picked by env and rebuilt when the env changes
+- [x] Blueprints (`src/config/printful.ts`): all ten variants mapped to
+      Printful catalog variants (every one in stock for the UK on 5 Oct),
+      placements and thread colours; three print files in `public/print/`
+      (`scripts/print-files.mjs`). Orders work from the catalog before any
+      product exists in the store (needs an https `NEXT_PUBLIC_SITE_URL`)
+- [x] Generated store ids (`src/config/pod-ids.json`), written by
+      `node scripts/printful.mjs products sync` and only used for the store
+      they came from; hand-written ids in `products.ts` still win
+- [x] Operator CLI `scripts/printful.mjs`: status, catalog, printfiles,
+      products sync, webhooks, orders, selftest (read-only parts run today)
+- [x] Commerce tables as migration `20261005080000_commerce.sql`, applied to
+      Kittyfive and recorded; the RLS smoke test covers them
+- [x] `/admin` Orders card: Send to the maker, Confirm at Printful, Refresh
+      from the maker; Connected services shows the Printful state in words
+- [x] Verify harness `npm run verify:commerce` (`scripts/verify-commerce.mjs`):
+      mock Stripe, Supabase, Printful and Printify on 127.0.0.1 through
+      `STRIPE_API_BASE` / `PRINTFUL_API_URL` / `PRINTIFY_API_URL` /
+      `POD_IDS_JSON`, driving the production build (rebuilt when `src/` is
+      newer than `.next/BUILD_ID`); passes with no keys; results in
+      `.verify/commerce-results.json`
+- [ ] The long-sleeve copy says "organic cotton"; Bella + Canvas 3501 is
+      combed ring-spun cotton: change the words in `src/config/products.ts`
+      or pick another blueprint
+- [ ] `public/products/*.png` (the store cards' and Stripe's product images)
+      do not exist yet
+- [ ] Cap `thread_colors` option: settle it from `printfiles` once a store
+      exists (Handover 06, open questions)
+
+**Felix**
+- [ ] Printful → Stores → Connect via API (a "Manual order / API" store); its
+      id as `PRINTFUL_STORE_ID` in `.env.local` and Vercel
+- [ ] Printful → Billing: a payment method (confirm fails without one; the
+      orders wait as drafts)
+- [ ] Commit and deploy `public/print/` and `src/config/pod-ids.json` (the
+      build imports it, even as the empty placeholder), then
+      `node scripts/printful.mjs products sync`; commit `pod-ids.json` again
+- [ ] `PRINTFUL_WEBHOOK_SECRET` in both places, then
+      `node scripts/printful.mjs webhooks register https://kittyfive.vercel.app`
+- [ ] Stripe live key, Stripe webhook secret, `SUPABASE_SERVICE_ROLE_KEY`,
+      `PRINTFUL_API_TOKEN` (Sensitive) and `PRINTFUL_CONFIRM=0` in Vercel
+      Production, by hand (today it holds only the public Supabase pair, the
+      site URL and the Anthropic key; the 5 Oct session's `vercel env add`
+      was refused, so nothing was added)
 - [ ] Vercel Pro and Supabase Pro before the first sale (Hobby forbids
       commercial use; Free pauses after a week idle)
-- [ ] Resend order and shipping emails; £1 snack
+- [ ] Resend order and shipping emails (built; waits on the domain from
+      Phase 5). The £1 snack goes live with Stripe, nothing extra
 
 ## Phase 7 · Your pet, your story (open platform)
 
@@ -336,7 +388,7 @@ physical off switch) triggered by a paid Stripe order; Canon 750D live view for
 | Admin | `admins` table + `is_admin()` that also requires a confirmed email; RLS is the boundary, the UI only reflects it | Email check in React |
 | Database region | Supabase eu-central-1 (Frankfurt); Vercel functions `fra1` beside it | `lhr1` (one hop further from the database) |
 | Store look | Stylised, animated 3D house built in Blender | Photogrammetry (heavy, uncanny on phones) |
-| Print on demand | Printful UK primary; Inkthreadable fallback; Printify third | Gelato/Prodigi/Teemill (no UK caps or embroidery) |
+| Print on demand | Printful UK primary, on API v1: draft then confirm, our own print files ordered straight from the catalog so orders flow before a store product exists (5 Oct 2026); Printify the coded fallback; Inkthreadable a manual option (polling-only API) | Gelato/Prodigi/Teemill (no UK caps or embroidery); a single `?confirm=true` call (a failed confirm would lose the draft) |
 | Payments | Stripe hosted Checkout + verified webhook + `after()` | Payment Links (no address/fulfilment) |
 | Chat | Claude Opus 5, streaming, cached system prompt, low effort | — |
 | AR | MediaPipe Tasks Vision; Snap Camera Kit Web as the upgrade | WebXR on iOS (absent), 8th Wall (closed) |
