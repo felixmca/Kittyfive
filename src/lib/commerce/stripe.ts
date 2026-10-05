@@ -19,6 +19,7 @@ import {
   ensureOrderItems,
   getOrderBySessionId,
   insertOrderIdempotent,
+  recordSubmissionIfUnrecorded,
   toSummary,
   updateOrder,
   type NewOrder,
@@ -209,15 +210,14 @@ async function processPaidSession(rawSession: Stripe.Checkout.Session, eventType
         to: current.email,
         id: mail.id,
       });
-      // Mark it done, and re-assert what fulfil() established in case its own
-      // row update failed (pod_submitted_unrecorded): the provider id must
-      // land in the row, or the admin button would send the order again.
-      await updateOrder(order.id, {
-        processed_at: new Date().toISOString(),
-        ...(current.pod_order_id
-          ? { status: current.status, pod_provider: current.pod_provider, pod_order_id: current.pod_order_id }
-          : {}),
-      });
+      // If fulfil()'s own row update failed (pod_submitted_unrecorded) the
+      // provider id must still land in the row, or the admin button would
+      // send the order again. Only a row with NO provider id is touched: one
+      // that has it may already have been moved on by the provider's webhook.
+      if (current.pod_order_id) {
+        await recordSubmissionIfUnrecorded(order.id, { pod_provider: current.pod_provider, pod_order_id: current.pod_order_id });
+      }
+      await updateOrder(order.id, { processed_at: new Date().toISOString() });
     } catch (err) {
       // processed_at stays null. Stripe does not retry a 200, so what resumes
       // from here is a manual resend from the Stripe Dashboard or the admin

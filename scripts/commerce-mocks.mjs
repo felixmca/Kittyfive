@@ -318,7 +318,8 @@ const SCHEMA = {
   order_items: {
     columns: ["id", "order_id", "product_id", "variant_id", "quantity", "unit_pence"],
     required: ["order_id", "product_id", "variant_id", "quantity", "unit_pence"],
-    unique: [],
+    // migration 20261005120000_order_items_unique: one line per variant per order
+    unique: [["order_id", "variant_id"]],
     identity: "id",
     defaults: () => ({}),
   },
@@ -507,11 +508,13 @@ function createPostgrestMock(state, requests, key) {
           }
         }
         let conflict = null;
-        for (const col of schema.unique) {
-          const existing = rows.find((r) => r[col] === row[col]);
-          if (existing) conflict = { col, existing };
+        for (const key of schema.unique) {
+          const cols = Array.isArray(key) ? key : [key];
+          const existing = rows.find((r) => cols.every((c) => r[c] === row[c]));
+          if (existing) conflict = { col: cols.join(","), cols, existing };
         }
         if (conflict) {
+          // supabase-js sends on_conflict=col1,col2 for a composite key.
           if (onConflict === conflict.col && resolution === "ignore-duplicates") continue;
           if (onConflict === conflict.col && resolution === "merge-duplicates") {
             Object.assign(conflict.existing, values);
@@ -523,8 +526,8 @@ function createPostgrestMock(state, requests, key) {
             res,
             409,
             "23505",
-            `duplicate key value violates unique constraint "${table}_${conflict.col}_key"`,
-            `Key (${conflict.col})=(${row[conflict.col]}) already exists.`,
+            `duplicate key value violates unique constraint "${table}_${conflict.cols.join("_")}_key"`,
+            `Key (${conflict.col})=(${conflict.cols.map((c) => row[c]).join(", ")}) already exists.`,
           );
           return;
         }

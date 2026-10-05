@@ -180,7 +180,7 @@ One row back means this run holds the order; none means another run does (a
 Stripe retry racing the first delivery, or the admin button racing the
 webhook), and nothing is sent. A provider failure releases the claim (sets
 `pod_provider` back to null where `pod_order_id` is still null) so a retry is
-possible. The admin button passes `force: true` after the webhook's 90 s grace
+possible. The admin button passes `force: true` after the webhook's 150 s grace
 (4c), so a claim left by a run that died never blocks an order for good.
 
 `fulfil` never throws. Every outcome is an `order_events` row:
@@ -383,7 +383,7 @@ read `last:` and use Send to the maker).
 - **Send to the maker** (`fulfil`): a merch order at `paid` with no provider id.
   Runs `fulfil()` exactly as the webhook would, with `force: true`, so a claim
   left behind by a run that died (`pod_provider` set, no `pod_order_id`) is
-  taken over. Refused (409) for 90 s after the order is created while
+  taken over. Refused (409) for 150 s after the order is created while
   `processed_at` is null, so it cannot race the Stripe webhook's deferred
   fulfilment into a second provider order. Events: `admin_fulfil`, then
   whatever `fulfil` records.

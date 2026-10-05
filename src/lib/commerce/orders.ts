@@ -87,7 +87,11 @@ export async function ensureOrderItems(orderId: string, items: NewOrderItem[]): 
   const existing = await getOrderItems(orderId);
   if (existing.length || !items.length) return existing;
   const db = getSupabaseAdmin();
-  const { error } = await db.from("order_items").insert(items.map((item) => ({ ...item, order_id: orderId })));
+  // Unique (order_id, variant_id): a second delivery racing the first cannot
+  // double the line items (migration 20261005120000_order_items_unique).
+  const { error } = await db
+    .from("order_items")
+    .upsert(items.map((item) => ({ ...item, order_id: orderId })), { onConflict: "order_id,variant_id", ignoreDuplicates: true });
   if (error) fail("insert order_items (retry)", error);
   return getOrderItems(orderId);
 }
@@ -117,7 +121,7 @@ export async function insertOrderIdempotent(
     if (items.length) {
       const { error: itemsError } = await db
         .from("order_items")
-        .insert(items.map((item) => ({ ...item, order_id: row.id })));
+        .upsert(items.map((item) => ({ ...item, order_id: row.id })), { onConflict: "order_id,variant_id", ignoreDuplicates: true });
       if (itemsError) fail("insert order_items", itemsError);
     }
     return { order: row, isNew: true };
@@ -161,6 +165,30 @@ export async function getOrderItems(orderId: string): Promise<OrderItemRow[]> {
   const { data, error } = await db.from("order_items").select("*").eq("order_id", orderId).order("id");
   if (error) fail("select order_items", error);
   return (data as OrderItemRow[] | null) ?? [];
+}
+
+/**
+ * After fulfilment: if the provider's id never reached the row (the update in
+ * fulfil() failed: pod_submitted_unrecorded), write it now, but ONLY while the
+ * row still has no provider id. A row that already has one may since have
+ * been advanced by the provider's webhook, and must not be set back to
+ * "submitted". Never throws into the caller's flow.
+ */
+export async function recordSubmissionIfUnrecorded(
+  orderId: string,
+  submission: { pod_provider: string | null; pod_order_id: string },
+): Promise<void> {
+  try {
+    const db = getSupabaseAdmin();
+    const { error } = await db
+      .from("orders")
+      .update({ status: "submitted", pod_provider: submission.pod_provider, pod_order_id: submission.pod_order_id })
+      .eq("id", orderId)
+      .is("pod_order_id", null);
+    if (error) fail("record submission", error);
+  } catch (err) {
+    console.error(`[orders] could not record provider order ${submission.pod_order_id} on ${orderId}:`, err);
+  }
 }
 
 export async function updateOrder(orderId: string, patch: OrderPatch): Promise<OrderRow> {
@@ -302,18 +330,34 @@ export async function listOrders(opts: { limit?: number; status?: OrderStatus } 
   if (!orders.length) return [];
   const ids = orders.map((o) => o.id);
 
-  const [{ data: itemData, error: itemsError }, { data: eventData, error: eventsError }] = await Promise.all([
+  const [
+    { data: itemData, error: itemsError },
+    { data: eventData, error: eventsError },
+    { data: confirmData, error: confirmError },
+  ] = await Promise.all([
     db.from("order_items").select("*").in("order_id", ids).order("id"),
     db
       .from("order_events")
-      .select("order_id, type, created_at, payload")
+      .select("order_id, type, created_at")
       .in("order_id", ids)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(ids.length * 25),
+    // The confirm/draft events on their own: a chatty order (every Printful
+    // order_updated is logged) must not push another order's pod_submitted
+    // out of the window above and make its draft chip vanish.
+    db
+      .from("order_events")
+      .select("order_id, type, payload")
+      .in("order_id", ids)
+      .in("type", [...CONFIRM_EVENTS])
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(ids.length * 10),
   ]);
   if (itemsError) fail("list order_items", itemsError);
   if (eventsError) fail("list order_events", eventsError);
+  if (confirmError) fail("list confirm events", confirmError);
 
   const itemsByOrder = new Map<string, OrderItemRow[]>();
   for (const item of (itemData as OrderItemRow[] | null) ?? []) {
@@ -322,10 +366,14 @@ export async function listOrders(opts: { limit?: number; status?: OrderStatus } 
     itemsByOrder.set(item.order_id, list);
   }
   const lastEventByOrder = new Map<string, Pick<OrderEventRow, "type" | "created_at">>();
+  for (const ev of (eventData as Array<Pick<OrderEventRow, "order_id" | "type" | "created_at">> | null) ?? []) {
+    if (ev.order_id && !lastEventByOrder.has(ev.order_id)) {
+      lastEventByOrder.set(ev.order_id, { type: ev.type, created_at: ev.created_at });
+    }
+  }
   const eventsByOrder = new Map<string, Array<Pick<OrderEventRow, "type" | "payload">>>();
-  for (const ev of (eventData as Array<Pick<OrderEventRow, "order_id" | "type" | "created_at" | "payload">> | null) ?? []) {
+  for (const ev of (confirmData as Array<Pick<OrderEventRow, "order_id" | "type" | "payload">> | null) ?? []) {
     if (!ev.order_id) continue;
-    if (!lastEventByOrder.has(ev.order_id)) lastEventByOrder.set(ev.order_id, { type: ev.type, created_at: ev.created_at });
     const list = eventsByOrder.get(ev.order_id) ?? [];
     list.push({ type: ev.type, payload: ev.payload });
     eventsByOrder.set(ev.order_id, list);

@@ -42,8 +42,13 @@ const NO_STORE = { headers: { "Cache-Control": "no-store" } };
 const ACTIONS = ["fulfil", "confirm", "refresh"] as const;
 type Action = (typeof ACTIONS)[number];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** How long after creation the Stripe webhook's deferred fulfilment may still be running. */
-const WEBHOOK_GRACE_MS = 90_000;
+/**
+ * How long after creation the Stripe webhook's deferred fulfilment may still
+ * be running. On Vercel after() ends inside that route's maxDuration (60 s);
+ * locally there is no cap and the longest Printful chain (draft, lookup,
+ * confirm, each with one 429 wait) is about 105 s, so 150 s covers both.
+ */
+const WEBHOOK_GRACE_MS = 150_000;
 
 // Status only ever moves forward; cancelled/failed are accepted unless delivered.
 // Kept in step with src/app/api/webhooks/pod/route.ts (copied, not imported).

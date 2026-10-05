@@ -50,9 +50,11 @@ const when = (iso: string) =>
 
 const providerName = (name: string | null) => (name ? (PROVIDER_LABEL[name] ?? name) : null);
 
-/** After this long with processed_at still empty, the webhook's deferred fulfilment did not finish. */
-const STALLED_AFTER_MS = 120_000;
+/** After this long with processed_at still empty, the webhook's deferred fulfilment did not finish (matches the admin route's grace). */
+const STALLED_AFTER_MS = 150_000;
 const stalled = (o: AdminOrderSummary) => !o.processedAt && Date.now() - Date.parse(o.createdAt) > STALLED_AFTER_MS;
+/** The webhook finished but the maker never got the order (refused, unmapped, not configured): it needs sending again. */
+const refused = (o: AdminOrderSummary) => o.kind === "merch" && o.status === "paid" && !o.podOrderId && Boolean(o.processedAt);
 
 function itemsLine(items: AdminOrderSummary["items"]): string {
   return items
@@ -208,6 +210,15 @@ export default function Orders({ live }: { live: boolean }) {
                       title="The payment webhook never finished this order (no processed_at)."
                     >
                       fulfilment did not finish
+                    </span>
+                  ) : null}
+                  {refused(o) ? (
+                    <span
+                      className="rounded-full border border-amber-300/50 bg-amber-300/10 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-amber-200"
+                      data-order-refused
+                      title="Paid, but the maker never received it (see the last event). Send it again."
+                    >
+                      not with the maker: send again
                     </span>
                   ) : null}
                 </span>

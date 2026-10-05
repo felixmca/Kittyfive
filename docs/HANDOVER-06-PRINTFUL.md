@@ -231,7 +231,7 @@ listed here changed.
   `pod_order_id` is null, and `pod_provider` is null unless forced); no row
   back means another run holds it and nothing is sent. A provider failure
   releases the claim. Called by the Stripe webhook in `after()` and by the
-  admin button (which forces past a dead claim after the 90 s grace).
+  admin button (which forces past a dead claim after the 150 s grace).
 - `src/lib/commerce/stripe.ts`: the deferred work's last update sets
   `processed_at` and re-asserts `status` / `pod_provider` / `pod_order_id` when
   fulfilment returned a provider id; `order_items.unit_pence` is what the
@@ -286,7 +286,7 @@ listed here changed.
 - `GET /api/admin/orders?limit=30[&status=]` and
   `POST /api/admin/orders/{id}` `{ action: "fulfil" | "confirm" | "refresh" }`
   (`src/app/api/admin/orders/`), admins only, JSON errors, 409 on every
-  precondition (including a 90 s grace after an order is created, so the button
+  precondition (including a 150 s grace after an order is created, so the button
   cannot race the Stripe webhook into a second Printful order).
 - `src/components/admin/Orders.tsx`: the Orders card with Send to the maker,
   Confirm at Printful (or Send to production for Printify), Refresh from the

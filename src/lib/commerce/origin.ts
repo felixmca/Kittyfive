@@ -8,7 +8,14 @@
  */
 export function resolveOrigin(req: Request): string {
   const localHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ?? req.headers.get("host")?.trim();
-  if (localHost && (localHost.startsWith("localhost") || localHost.startsWith("127.") || localHost.startsWith("[::1]"))) {
+  let localName = "";
+  try {
+    localName = localHost ? new URL(`http://${localHost}`).hostname : "";
+  } catch {
+    localName = "";
+  }
+  // Exact names only: "localhost.attacker.tld" must never be treated as local.
+  if (localName === "localhost" || localName === "127.0.0.1" || localName === "[::1]") {
     const localProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
     return `${localProto || "http"}://${localHost}`;
   }

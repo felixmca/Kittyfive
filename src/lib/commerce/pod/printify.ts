@@ -244,6 +244,21 @@ export function createPrintifyProvider(cfg: PrintifyConfig): PodProvider {
           zip: address.zip,
         },
       };
+      const recovered = (existing: { id?: string | number; status?: string }): PodCreateResult => {
+        const status = (str(existing.status) ?? "").toLowerCase();
+        const inProduction = status !== "" && status !== "pending" && status !== "on-hold" && status !== "payment-not-received";
+        return {
+          providerOrderId: idString(existing.id) as string,
+          sentToProduction: inProduction,
+          note: `recovered existing order by external_id (status ${status || "unknown"})`,
+        };
+      };
+      // Printify does NOT reject a second order with the same external_id, so
+      // look first: a run that died after send_to_production but before our
+      // row update must find its order here rather than order it again.
+      const before = await findByExternalId(body.external_id);
+      if (before) return recovered(before);
+
       let created: { id: string | number } | null = null;
       try {
         created = await printifyFetch<{ id: string | number }>(cfg, `/shops/${shop}/orders.json`, {
@@ -252,18 +267,9 @@ export function createPrintifyProvider(cfg: PrintifyConfig): PodProvider {
         });
       } catch (err) {
         // Printify may have stored the order before the failure (timeout, 5xx
-        // after commit). Look for it by external_id before giving up, so a
-        // retry never orders twice.
+        // after commit). Look again before giving up, so a retry never orders twice.
         const existing = await findByExternalId(body.external_id);
-        if (existing) {
-          const status = (str(existing.status) ?? "").toLowerCase();
-          const inProduction = status !== "" && status !== "pending" && status !== "on-hold" && status !== "payment-not-received";
-          return {
-            providerOrderId: idString(existing.id) as string,
-            sentToProduction: inProduction,
-            note: `recovered existing order by external_id (status ${status || "unknown"})`,
-          };
-        }
+        if (existing) return recovered(existing);
         throw err;
       }
       const providerOrderId = idString(created?.id);
