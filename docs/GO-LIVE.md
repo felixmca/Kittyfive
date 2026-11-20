@@ -246,6 +246,9 @@ permission layer), so every name below is yours to add.
 
 - [ ] **Vercel Pro and Supabase Pro** before the first sale (Hobby forbids
       commercial use; Free pauses after a week idle).
+      Since 20 November 2026 the Supabase project sits in the free
+      « Kittyfive » organisation (a daily cron on `/api/keepalive` keeps it
+      awake): transfer it to a paid organisation in Project Settings → General.
 - [ ] **Stripe → toggle to Live mode.** Copy the **live** secret key
       (`sk_live_…`) into Vercel **Production only**.
 - [ ] **Stripe → Developers → Webhooks → Add endpoint:**
